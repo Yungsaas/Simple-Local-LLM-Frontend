@@ -2,6 +2,7 @@
 A simple local LLM frontend with no fancy features. Everything about your chats and conversations is handled locally, including web browsing tool access. No APIs or third-party sign-ins needed. Currently only supports Ollama.
 
 ## Features
+- Privacy-first approach, everything runs on your local machine.
 - Register multiple Ollama models and switch between them from a top-right dropdown
 - Compare two models side-by-side on the same prompt (simultaneous or one-at-a-time)
 - Instruction presets, optional system prompts you can pick per chat

@@ -60,7 +60,7 @@ def _idle_watchdog():
         with _last_request_lock:
             idle_seconds = time.time() - _last_request_time
         if idle_seconds > IDLE_TIMEOUT_MINUTES * 60:
-            print(f'[local_cors_proxy] Idle for {IDLE_TIMEOUT_MINUTES:.0f} min — shutting down.')
+            print(f'[local_cors_proxy] Idle for {IDLE_TIMEOUT_MINUTES:.0f} min, shutting down.')
             os._exit(0)
 
 
@@ -180,7 +180,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         except Exception as e:
             # Printed here (not just sent to the browser) so the real reason
-            # shows up directly in this terminal — e.g. "URLError" (network/
+            # shows up directly in this terminal, e.g. "URLError" (network/
             # SSL/DNS issue) vs "TimeoutError" (upstream too slow) vs
             # "ConnectionResetError" (target actively cut the connection,
             # often a bot-block) point at very different problems.
@@ -207,7 +207,7 @@ if __name__ == '__main__':
         print(f'Will auto-stop after {IDLE_TIMEOUT_MINUTES:.0f} min of inactivity (pass 0 as a second argument to disable).')
         threading.Thread(target=_idle_watchdog, daemon=True).start()
     else:
-        print('Auto-shutdown disabled — will run until you stop it.')
+        print('Auto-shutdown disabled, will run until you stop it.')
     print('Press Ctrl+C to stop.')
     try:
         server.serve_forever()

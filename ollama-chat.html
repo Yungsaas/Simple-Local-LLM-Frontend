@@ -524,10 +524,10 @@
       <div class="model-list" id="presetList"></div>
     </div>
     <div class="field">
-      <label>Reasoning effort <span class="field-hint">(thinking models only — some models may ignore this)</span></label>
+      <label>Reasoning effort <span class="field-hint">(thinking models only, some models may ignore this)</span></label>
       <select class="field-select" id="thinkLevelInput">
         <option value="default">Default</option>
-        <option value="off">Off — skip thinking entirely</option>
+        <option value="off">Off, skip thinking entirely</option>
         <option value="low">Low</option>
         <option value="medium">Medium</option>
         <option value="high">High</option>
@@ -535,11 +535,11 @@
       </select>
     </div>
     <div class="field">
-      <label>Max response length <span class="field-hint">(tokens, thinking + reply combined — hard stop if a model loops)</span></label>
+      <label>Max response length <span class="field-hint">(tokens, thinking + reply combined, hard stop if a model loops)</span></label>
       <input type="number" id="maxTokensInput" placeholder="No limit" min="1" step="1">
     </div>
     <div class="field">
-      <label>CORS proxy <span class="field-hint">(a script you run yourself on localhost — see local_cors_proxy.py — so web_search/web_fetch never route through a third party)</span></label>
+      <label>CORS proxy <span class="field-hint">(a script you run yourself on localhost, see local_cors_proxy.py, so web_search/web_fetch never route through a third party)</span></label>
       <input type="text" id="corsProxyInput" placeholder="http://127.0.0.1:8765/?url=">
     </div>
     <div class="field">
@@ -586,14 +586,14 @@ function load(){
   // Migrate the old combined "web browsing" toggle (which used to gate
   // Wikipedia lookup too) onto the new field name, which now only gates
   // the proxy-dependent web_search/web_fetch tools. Wikipedia lookup no
-  // longer has a toggle at all — it's always available.
+  // longer has a toggle at all, it's always available.
   state.chats.forEach(chat => {
     if(chat && chat.webBrowsingEnabled !== undefined && chat.webSearchEnabled === undefined){
       chat.webSearchEnabled = chat.webBrowsingEnabled;
     }
     delete chat.webBrowsingEnabled;
-    // Chats saved before sequential compare existed always ran simultaneously
-    // — preserve that behavior for them rather than silently switching their
+    // Chats saved before sequential compare existed always ran simultaneously,
+    // so preserve that behavior for them rather than silently switching their
     // existing compare chats to the new sequential default.
     if(chat && chat.compare && !chat.compareMode){
       chat.compareMode = 'simultaneous';
@@ -666,7 +666,7 @@ function persistSettings(){
 }
 
 // Chat IDs need to be safe to compare across devices/browsers for the local
-// save-file and import/export reconciliation logic — a plain timestamp could
+// save-file and import/export reconciliation logic, a plain timestamp could
 // theoretically collide if two chats are created in the same millisecond on
 // different machines, so we add a random suffix.
 function newChatId(){
@@ -696,7 +696,7 @@ function makeNewChat(){
 // Chats can live in two places: the browser's localStorage (always, as a
 // fast cache/fallback) and, optionally, a real chats.json file the user
 // picks via the browser's folder picker. Settings intentionally never
-// leave localStorage — server URL, registered models, theme etc. are
+// leave localStorage, server URL, registered models, theme etc. are
 // per-device config, not portable data.
 // =====================================================================
 
@@ -766,7 +766,7 @@ async function readJSONFile(dirHandle, name){
 }
 
 // Two chats sharing an ID are safe to auto-merge (keep the longer one) only
-// when one's messages are an exact prefix of the other's — i.e. one is just
+// when one's messages are an exact prefix of the other's, i.e. one is just
 // the other continued further. If they've actually diverged (edited
 // differently in two places before ever syncing), we don't guess: both are
 // kept, with the losing copy renamed so nothing is silently discarded.
@@ -802,15 +802,15 @@ function reconcileChats(listA, listB){
       byId.set(incoming.id, incoming); // incoming is existing continued further
       resolvedSafely++;
     } else if(messagesArePrefix(incomingMsgs, existingMsgs)){
-      // existing already the longer one — keep it, nothing to do
+      // existing already the longer one, keep it, nothing to do
       resolvedSafely++;
     } else if(chatSize(existing) === chatSize(incoming) &&
               existingMsgs.length === incomingMsgs.length &&
               JSON.stringify(existingMsgs) === JSON.stringify(incomingMsgs)){
-      // genuinely identical — keep either, no conflict
+      // genuinely identical, keep either, no conflict
       resolvedSafely++;
     } else {
-      // real divergence — keep both under distinct ids
+      // real divergence, keep both under distinct ids
       const conflictCopy = { ...incoming, id: newChatId(), title: (incoming.title || 'Chat') + ' (conflict copy)' };
       byId.set(conflictCopy.id, conflictCopy);
       keptBothOnConflict++;
@@ -840,19 +840,19 @@ async function connectLocalSaveFile(){
     let message;
 
     if(!fileChats){
-      // Case 1: no file yet — create it from whatever's in the browser now.
+      // Case 1: no file yet, create it from whatever's in the browser now.
       await writeJSONFile('chats.json', state.chats);
       message = `Created chats.json in "${dirHandle.name}" with your ${state.chats.length} existing chat(s).`;
     } else if(!state.chats.length){
-      // Case 2: file exists, browser has nothing — just adopt the file.
+      // Case 2: file exists, browser has nothing, just adopt the file.
       state.chats = fileChats;
       message = `Loaded ${fileChats.length} chat(s) from "${dirHandle.name}".`;
     } else {
-      // Case 3: both exist — reconcile, then write the merged result back.
+      // Case 3: both exist, reconcile, then write the merged result back.
       const { merged, summary } = reconcileChats(state.chats, fileChats);
       state.chats = merged;
       await writeJSONFile('chats.json', state.chats);
-      message = `Connected to "${dirHandle.name}" — ${summary}`;
+      message = `Connected to "${dirHandle.name}", ${summary}`;
     }
 
     state.settings.useLocalFile = true;
@@ -914,7 +914,7 @@ async function reconnectLocalSaveFile(){
 // silently pick the connection back up. Re-granting write permission after
 // the browser restarts needs a real user gesture, so if it's not already
 // 'granted' we surface a one-click "Reconnect" button instead of a file
-// picker (the folder itself is already remembered — this is just a
+// picker (the folder itself is already remembered, this is just a
 // permission re-confirmation).
 async function tryRestoreLocalSaveFile(){
   if(!state.settings.useLocalFile || !('showDirectoryPicker' in window)) return;
@@ -937,7 +937,7 @@ async function tryRestoreLocalSaveFile(){
     } else {
       pendingSaveDirHandle = dirHandle;
     }
-  }catch(e){ /* ignore — falls back to localStorage silently */ }
+  }catch(e){ /* ignore, falls back to localStorage silently */ }
   renderStorageSettings();
 }
 
@@ -970,7 +970,7 @@ async function handleImportFile(ev){
       showSettingsMessage('That file has no chats in it.', true);
       return;
     }
-    // Import only ever touches chat history — never settings — so a stale
+    // Import only ever touches chat history, never settings, so a stale
     // backup can't accidentally overwrite this machine's server URL, models,
     // theme, etc.
     const { merged, summary } = reconcileChats(state.chats, importedChats);
@@ -979,7 +979,7 @@ async function handleImportFile(ev){
     renderChatList();
     renderMessages();
     renderModelSelect();
-    showSettingsMessage(`Imported ${importedChats.length} chat(s) — ${summary}`, false);
+    showSettingsMessage(`Imported ${importedChats.length} chat(s), ${summary}`, false);
   }catch(e){
     showSettingsMessage('Could not import that file: ' + e.message, true);
   }
@@ -1045,7 +1045,7 @@ function deleteChat(id, ev){
   ev.stopPropagation();
   // The chat actively streaming a response is always state.currentId (newChat
   // and selectChat both refuse to change it while streaming), so this is the
-  // one case that needs blocking — deleting it would detach the in-flight
+  // one case that needs blocking, deleting it would detach the in-flight
   // response from state.chats and silently discard it once it finishes.
   if(state.streaming && id === state.currentId) return;
   state.chats = state.chats.filter(c => c.id !== id);
@@ -1090,7 +1090,7 @@ function renderMarkdown(text){
   });
 
   // Protect $...$ inline math. Heuristic avoids matching bare currency like
-  // "costs $9, and $14" — requires no whitespace touching the delimiters and
+  // "costs $9, and $14", requires no whitespace touching the delimiters and
   // no digit right after the closing $ (which would indicate a second price).
   protectedText = protectedText.replace(
     /(?<!\\)\$(?!\s)([^\$\n]*?)(?<!\s)\$(?!\d)/g,
@@ -1165,7 +1165,7 @@ function renderAssistantContent(msg){
   } else if(msg.stopped){
     html += `<span style="color:var(--text-secondary);">Stopped.</span>`;
   } else if(msg.queued){
-    html += `<span style="color:var(--text-secondary);">Queued — waiting for the other model to finish…</span>`;
+    html += `<span style="color:var(--text-secondary);">Queued, waiting for the other model to finish…</span>`;
   } else if(!msg.thinking && !(msg.toolLog && msg.toolLog.length)){
     html += `<div class="typing-dots"><span></span><span></span><span></span></div>`;
   }
@@ -1173,8 +1173,8 @@ function renderAssistantContent(msg){
 }
 
 // Renders the collapsible "used N tools" block showing exactly what was
-// looked up — search queries, URLs fetched, and a short preview of what
-// came back — so tool use is visible and debuggable, not a black box.
+// looked up, search queries, URLs fetched, and a short preview of what
+// came back, so tool use is visible and debuggable, not a black box.
 function renderToolLog(toolLog){
   const stillRunning = toolLog.some(t => t.status === 'running');
   const labelFor = (t) => {
@@ -1292,7 +1292,7 @@ function buildCompareRow(msgA, msgB, indexA, indexB){
 
 // Updates a single assistant bubble (by its index in chat.messages) in
 // place. Used for streaming updates so we don't re-render the whole
-// conversation on every token — works the same whether that message is
+// conversation on every token, works the same whether that message is
 // part of a normal turn or one column of a compare-mode turn.
 function updateStreamingBubble(index){
   const chat = getCurrentChat();
@@ -1312,7 +1312,7 @@ function updateStreamingBubble(index){
 }
 
 // Scrolls the messages pane to the bottom. By default this only happens if
-// the user is already following along (state.autoScroll) — so scrolling up
+// the user is already following along (state.autoScroll), so scrolling up
 // to reread something during a long generation doesn't get yanked back down
 // on every new token. Pass force=true for cases where jumping to the bottom
 // is always the right call (sending a message, switching chats, etc).
@@ -1442,10 +1442,10 @@ function toggleCompareMode(){
 }
 
 // 'simultaneous' (default, matches original behavior) fires both models at
-// once via Promise.allSettled — fastest, but needs enough RAM/VRAM to hold
+// once via Promise.allSettled, fastest, but needs enough RAM/VRAM to hold
 // both models loaded at the same time, and either can slow the other down
 // by competing for the same CPU/GPU. 'sequential' runs model A to
-// completion, then model B — slower overall, but only one model is ever
+// completion, then model B, slower overall, but only one model is ever
 // loaded/generating at a time, which matters a lot on machines that can't
 // comfortably fit two models in memory at once.
 function onCompareModeChange(value){
@@ -1456,7 +1456,7 @@ function onCompareModeChange(value){
 }
 
 // --- Web search toggle (per-chat, like Compare mode) ---
-// Wikipedia lookup needs no toggle — it works with no setup and is always
+// Wikipedia lookup needs no toggle, it works with no setup and is always
 // offered to the model. This toggle only controls web_search/web_fetch,
 // since those need the local CORS proxy running.
 function renderWebSearchUI(){
@@ -1476,7 +1476,7 @@ function toggleWebSearch(){
   renderWebSearchUI();
 }
 
-// Reports whether the local CORS proxy is reachable right now — a page can't
+// Reports whether the local CORS proxy is reachable right now, a page can't
 // start or stop a native process, so this only checks it, it can't control
 // it. Runs when web search is toggled, when switching to a chat that has it
 // on, and periodically while active, so a down proxy surfaces before a tool
@@ -1495,7 +1495,7 @@ async function checkProxyStatus(){
   btn.classList.add('proxy-checking');
   try{
     // Any response at all (even a 400 for a missing '?url=') proves the
-    // proxy process is up and listening — only a network-level failure
+    // proxy process is up and listening, only a network-level failure
     // (connection refused, etc.) means it isn't running.
     await fetch(proxy);
     btn.classList.remove('proxy-error');
@@ -1538,7 +1538,7 @@ function showSettingsMessage(msg, isError){
 
 // Model registry and instruction presets are mutated immediately as the
 // user edits them in the modal (unlike baseUrl/thinkLevel/etc., which only
-// commit on Save) — this snapshot lets Cancel revert those immediate edits
+// commit on Save), this snapshot lets Cancel revert those immediate edits
 // too, so "Cancel" means the same thing for every field in the dialog.
 // Local-save-file connect/disconnect is intentionally NOT part of this
 // revert: it has real filesystem/permission side effects that shouldn't be
@@ -1884,7 +1884,7 @@ async function checkConnection(){
     }
   }catch(e){
     dot.className = 'conn-dot err';
-    label.textContent = 'Can\'t reach Ollama — check Settings';
+    label.textContent = 'Can\'t reach Ollama, check Settings';
   }
 }
 
@@ -1925,7 +1925,7 @@ async function sendMessage(){
 
   // History is snapshotted *before* pushing the placeholder assistant
   // message(s) below, so it never includes the not-yet-answered turn.
-  // Built fresh per model via buildHistoryForModel — see its comment for
+  // Built fresh per model via buildHistoryForModel, see its comment for
   // why that matters in compare mode.
   if(chat.compare && chat.compareModel){
     const modelA = resolveActiveModel(chat);
@@ -1936,7 +1936,7 @@ async function sendMessage(){
     const idxA = chat.messages.length;
     chat.messages.push({ role:'assistant', content:'', thinking:'', model: modelA, groupId });
     const idxB = chat.messages.length;
-    // In sequential mode B hasn't started yet — `queued` swaps its bubble to
+    // In sequential mode B hasn't started yet, `queued` swaps its bubble to
     // a "Queued" label instead of the typing-dots animation, which would
     // otherwise misleadingly suggest it's already generating.
     const sequential = chat.compareMode === 'sequential';
@@ -1987,7 +1987,7 @@ async function sendMessage(){
 function resolveThinkValue(){
   const level = state.settings.thinkLevel || 'default';
   if(level === 'off') return false;
-  if(level === 'default') return undefined; // omit the field — model uses its own native default
+  if(level === 'default') return undefined; // omit the field, model uses its own native default
   return level; // 'low' | 'medium' | 'high' | 'max'
 }
 
@@ -2006,13 +2006,13 @@ const MAX_TOOL_ROUNDS = 5;
 const TOOL_MIN_INTERVAL_MS = 1000; // minimum gap between tool calls, human-paced rather than bot-paced
 let lastToolCallTime = 0;
 
-// Always available — no proxy required.
+// Always available, no proxy required.
 const WIKIPEDIA_TOOLS = [
   {
     type: 'function',
     function: {
       name: 'wikipedia_lookup',
-      description: 'Look up a topic on Wikipedia for reliable reference/encyclopedic information — established facts, historical events, concepts, definitions. Not for current news or very recent events.',
+      description: 'Look up a topic on Wikipedia for reliable reference/encyclopedic information, established facts, historical events, concepts, definitions. Not for current news or very recent events.',
       parameters: {
         type: 'object',
         properties: { query: { type: 'string', description: 'Topic or question to look up' } },
@@ -2029,7 +2029,7 @@ const WEB_SEARCH_TOOLS = [
     type: 'function',
     function: {
       name: 'web_search',
-      description: 'Search the live web for current information — recent news, current events, or anything not well covered by Wikipedia. Returns several relevant pages with their titles, URLs, and snippets.',
+      description: 'Search the live web for current information, recent news, current events, or anything not well covered by Wikipedia. Returns several relevant pages with their titles, URLs, and snippets.',
       parameters: {
         type: 'object',
         properties: { query: { type: 'string', description: 'The search query' } },
@@ -2041,7 +2041,7 @@ const WEB_SEARCH_TOOLS = [
     type: 'function',
     function: {
       name: 'web_fetch',
-      description: 'Fetch the full content of a specific web page by URL — e.g. one found via web_search, or a URL the user provided directly.',
+      description: 'Fetch the full content of a specific web page by URL, e.g. one found via web_search, or a URL the user provided directly.',
       parameters: {
         type: 'object',
         properties: { url: { type: 'string', description: 'The full URL to fetch' } },
@@ -2051,7 +2051,7 @@ const WEB_SEARCH_TOOLS = [
   }
 ];
 
-// Enforces a minimum gap between tool calls — this is an assistive lookup
+// Enforces a minimum gap between tool calls, this is an assistive lookup
 // tool making a handful of on-demand requests at human-typing pace, not a
 // bulk scraper, and this keeps it that way regardless of how eagerly a
 // model chains tool calls.
@@ -2069,7 +2069,7 @@ async function enforceToolRateLimit(signal){
 }
 
 // Resolves a natural-language query to the best-matching Wikipedia article
-// title. Tries the fast `opensearch` endpoint first (prefix-match only —
+// title. Tries the fast `opensearch` endpoint first (prefix-match only,
 // great for "Mars", but misses phrase-y queries like "Artificial intelligence
 // definition"), then falls back to full-text `list=search`, which matches
 // words anywhere regardless of order.
@@ -2110,7 +2110,7 @@ async function fetchViaCorsProxy(targetUrl, signal){
     res = await fetch(proxy + encodeURIComponent(targetUrl), { signal });
   }catch(e){
     if(e.name === 'AbortError') throw e;
-    // The fetch to the proxy itself never completed — it's not running,
+    // The fetch to the proxy itself never completed, it's not running,
     // wrong port, etc.
     throw new Error(
       `Couldn't reach your local CORS proxy at ${proxy} (${e.message}). ` +
@@ -2125,17 +2125,17 @@ async function fetchViaCorsProxy(targetUrl, signal){
     throw new Error(`Local proxy responded but reading its response failed: ${e.message}`);
   }
   if(!res.ok){
-    // The proxy responded — it just couldn't satisfy the request (upstream
+    // The proxy responded, it just couldn't satisfy the request (upstream
     // site rejected it, timed out, TLS error, etc). Surface its actual
     // response body, which carries the real reason, instead of only the
-    // status code — that detail is what makes this debuggable.
+    // status code, that detail is what makes this debuggable.
     throw new Error(`Local proxy couldn't fetch that page (${res.status}): ${text.slice(0, 300)}`);
   }
   return text;
 }
 
 // DuckDuckGo wraps result links in its own redirect ("/l/?uddg=...") rather
-// than linking straight to the target — this pulls the real URL back out.
+// than linking straight to the target, this pulls the real URL back out.
 function resolveDdgUrl(href){
   try{
     const url = new URL(href, 'https://duckduckgo.com');
@@ -2282,7 +2282,7 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
       for(const line of lines) processLine(line);
     }
     // The stream can close without a trailing newline after the last JSON
-    // line (the one carrying done:true and the eval/timing stats) — if so
+    // line (the one carrying done:true and the eval/timing stats), if so
     // it's still sitting in `buffer` and would otherwise be silently lost.
     if(buffer.trim()) processLine(buffer);
   }catch(err){
@@ -2302,7 +2302,7 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
   }
 
   // If the model asked to use a tool, run it, feed the result back in, and
-  // let the model continue — reusing the same message bubble so the tool
+  // let the model continue, reusing the same message bubble so the tool
   // activity log and eventual answer appear as one continuous turn.
   if(pendingToolCalls && pendingToolCalls.length && toolRound < MAX_TOOL_ROUNDS){
     const msg = chat.messages[index];

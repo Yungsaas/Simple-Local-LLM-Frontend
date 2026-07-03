@@ -16,6 +16,11 @@ let state = {
   addingPreset: false,
   editingPresetId: null,
   autoScroll: true,   // whether new content should pull the view down with it
+  // Holds preset/web-search/compare choices made on the "Home" screen,
+  // i.e. before any chat exists yet. Applied to the chat the moment it's
+  // actually created (see sendMessage), then reset by resetDraft() the
+  // next time the user lands back on Home. See resetDraft() below.
+  draft: { promptPresetId: null, webSearchEnabled: false, compare: false, compareModel: null, compareMode: 'simultaneous' },
 };
 
 function load(){
@@ -130,3 +135,16 @@ function makeNewChat(){
   };
 }
 
+// Resets the Home-screen draft (preset/web-search/compare choices made
+// before any chat exists) back to defaults. Called whenever the user lands
+// on Home, so Home always starts from a clean slate rather than remembering
+// whatever was left over from the last visit.
+function resetDraft(){
+  state.draft = {
+    promptPresetId: null,
+    webSearchEnabled: false,
+    compare: false,
+    compareModel: null,
+    compareMode: 'simultaneous'
+  };
+}

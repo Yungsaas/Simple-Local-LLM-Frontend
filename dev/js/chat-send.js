@@ -40,7 +40,16 @@ async function sendMessage(){
 
   let chat = getCurrentChat();
   if(!chat){
+    // Nothing existed yet (Home screen) -- this first message is what
+    // actually creates the chat and earns it a sidebar slot. Whatever the
+    // user configured on Home (preset, web search, compare) via
+    // state.draft gets carried over onto the new chat here.
     chat = makeNewChat();
+    chat.promptPresetId = state.draft.promptPresetId;
+    chat.webSearchEnabled = state.draft.webSearchEnabled;
+    chat.compare = state.draft.compare;
+    chat.compareModel = state.draft.compareModel;
+    chat.compareMode = state.draft.compareMode;
     state.chats.unshift(chat);
     state.currentId = chat.id;
     renderModelSelect();
@@ -509,4 +518,3 @@ document.getElementById('messages').addEventListener('scroll', function(){
   state.autoScroll = distanceFromBottom < 60;
   updateScrollBottomBtn();
 });
-

@@ -52,6 +52,8 @@
     color:var(--text-primary);
     padding:6px 8px 14px 8px;
     letter-spacing:0.2px;
+    cursor:pointer;
+    user-select:none;
   }
   .new-chat-btn{
     display:flex; align-items:center; gap:8px;
@@ -62,6 +64,14 @@
     transition:background .15s ease;
   }
   .new-chat-btn:hover{ background:var(--accent-hover); }
+  .home-btn{
+    display:flex; align-items:center; gap:8px;
+    width:100%; text-align:left; background:none; border:none;
+    color:var(--text-secondary); font-size:13.5px; padding:8px;
+    border-radius:8px; cursor:pointer; margin-bottom:6px;
+  }
+  .home-btn:hover{ background:rgba(0,0,0,0.05); color:var(--text-primary); }
+  .home-btn.active{ background:var(--bg-elevated); box-shadow:0 0 0 1px var(--border); color:var(--text-primary); }
   .chat-list{
     flex:1; min-height:0; overflow-y:auto;
     display:flex; flex-direction:column; gap:2px;

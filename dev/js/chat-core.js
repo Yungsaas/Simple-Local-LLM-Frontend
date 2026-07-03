@@ -34,15 +34,24 @@ function buildHistoryForModel(chat, model){
   return history;
 }
 
-function newChat(){
+// Shows the blank "Home" screen: no chat selected, and nothing has been
+// created yet. The user can pick a model, an instruction preset, and
+// toggle web search/compare right here before ever sending a message --
+// those choices live in state.draft and only become a real chat (with a
+// sidebar entry) once the first message is actually sent, see
+// sendMessage() in chat-send.js. This is also what "+ New chat" does: a
+// chat is only worth a sidebar slot once it has something in it.
+function goHome(){
   if(state.streaming) return;
-  const chat = makeNewChat();
-  state.chats.unshift(chat);
-  state.currentId = chat.id;
-  persistChats();
+  state.currentId = null;
+  resetDraft();
   renderChatList();
   renderMessages();
   renderModelSelect();
+}
+
+function newChat(){
+  goHome();
 }
 
 function selectChat(id){
@@ -72,6 +81,9 @@ function deleteChat(id, ev){
 }
 
 function renderChatList(){
+  const homeBtn = document.getElementById('homeBtn');
+  if(homeBtn) homeBtn.classList.toggle('active', state.currentId === null);
+
   const el = document.getElementById('chatList');
   el.innerHTML = '';
   state.chats.forEach(chat => {
@@ -83,4 +95,3 @@ function renderChatList(){
     el.appendChild(item);
   });
 }
-

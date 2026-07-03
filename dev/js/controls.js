@@ -30,13 +30,14 @@ function renderModelSelect(){
 // --- Instruction preset dropdown (topbar) ---
 // Mirrors the model select's pattern: each chat remembers its own preset
 // choice, defaulting to "None", changeable at any time (not locked at
-// chat creation).
+// chat creation). When there's no current chat yet (the Home screen),
+// this reads/writes state.draft instead, see onPromptSelectChange.
 function renderPromptSelect(){
   const select = document.getElementById('promptSelect');
   if(!select) return;
   const chat = getCurrentChat();
   const presets = state.settings.promptPresets || [];
-  const currentId = chat ? chat.promptPresetId : null;
+  const currentId = chat ? chat.promptPresetId : state.draft.promptPresetId;
 
   let options = `<option value=""${!currentId ? ' selected' : ''}>No instructions</option>`;
   options += presets.map(p =>
@@ -49,35 +50,43 @@ function renderPromptSelect(){
     options += `<option value="${escapeHtml(currentId)}" selected>(deleted preset)</option>`;
   }
   select.innerHTML = options;
-  select.disabled = !chat;
+  // Always usable: with no chat yet, this edits state.draft, which gets
+  // applied to the chat that's created on first send.
+  select.disabled = false;
 }
 
 function onPromptSelectChange(value){
   const chat = getCurrentChat();
-  if(!chat) return;
-  chat.promptPresetId = value || null;
-  persistChats();
+  if(chat){
+    chat.promptPresetId = value || null;
+    persistChats();
+  } else {
+    state.draft.promptPresetId = value || null;
+  }
 }
 
 // --- Compare mode (feature: side-by-side model comparison) ---
+// Same Home-screen pattern as the preset dropdown: with no chat selected,
+// this reads/writes state.draft rather than a chat object.
 function renderCompareUI(){
   const chat = getCurrentChat();
   const btn = document.getElementById('compareToggleBtn');
   const modeSelect = document.getElementById('compareModeSelect');
   const select2 = document.getElementById('modelSelect2');
   const models = state.settings.models || [];
-  const enabled = !!(chat && chat.compare);
+  const source = chat || state.draft;
+  const enabled = !!source.compare;
 
   btn.classList.toggle('active', enabled);
-  btn.disabled = !chat;
+  btn.disabled = false;
   modeSelect.style.display = enabled ? '' : 'none';
   select2.style.display = enabled ? '' : 'none';
 
   if(!enabled) return;
 
-  modeSelect.value = chat.compareMode === 'sequential' ? 'sequential' : 'simultaneous';
+  modeSelect.value = source.compareMode === 'sequential' ? 'sequential' : 'simultaneous';
 
-  const currentB = chat.compareModel;
+  const currentB = source.compareModel;
   let options = models.map(m =>
     `<option value="${escapeHtml(m)}"${m === currentB ? ' selected' : ''}>${escapeHtml(m)}</option>`
   ).join('');
@@ -90,17 +99,17 @@ function renderCompareUI(){
 
 function toggleCompareMode(){
   const chat = getCurrentChat();
-  if(!chat) return;
-  chat.compare = !chat.compare;
-  if(chat.compare && !chat.compareModel){
-    const primary = resolveActiveModel(chat);
+  const target = chat || state.draft;
+  target.compare = !target.compare;
+  if(target.compare && !target.compareModel){
+    const primary = chat ? resolveActiveModel(chat) : state.settings.activeModel;
     const candidates = (state.settings.models || []).filter(m => m !== primary);
-    chat.compareModel = candidates[0] || primary || null;
+    target.compareModel = candidates[0] || primary || null;
   }
-  if(chat.compare && !chat.compareMode){
-    chat.compareMode = 'simultaneous';
+  if(target.compare && !target.compareMode){
+    target.compareMode = 'simultaneous';
   }
-  persistChats();
+  if(chat) persistChats();
   renderCompareUI();
 }
 
@@ -113,29 +122,34 @@ function toggleCompareMode(){
 // comfortably fit two models in memory at once.
 function onCompareModeChange(value){
   const chat = getCurrentChat();
-  if(!chat) return;
-  chat.compareMode = value === 'sequential' ? 'sequential' : 'simultaneous';
-  persistChats();
+  const target = chat || state.draft;
+  target.compareMode = value === 'sequential' ? 'sequential' : 'simultaneous';
+  if(chat) persistChats();
 }
 
 // --- Web search toggle (per-chat, like Compare mode) ---
 // Wikipedia lookup needs no toggle, it works with no setup and is always
 // offered to the model. This toggle only controls web_search/web_fetch,
-// since those need the local CORS proxy running.
+// since those need the local CORS proxy running. Same Home-screen/draft
+// pattern as the preset dropdown and Compare toggle above.
 function renderWebSearchUI(){
   const btn = document.getElementById('webSearchToggleBtn');
   if(!btn) return;
   const chat = getCurrentChat();
-  btn.classList.toggle('active', !!(chat && chat.webSearchEnabled));
-  btn.disabled = !chat;
+  const enabled = chat ? !!chat.webSearchEnabled : !!state.draft.webSearchEnabled;
+  btn.classList.toggle('active', enabled);
+  btn.disabled = false;
   checkProxyStatus();
 }
 
 function toggleWebSearch(){
   const chat = getCurrentChat();
-  if(!chat) return;
-  chat.webSearchEnabled = !chat.webSearchEnabled;
-  persistChats();
+  if(chat){
+    chat.webSearchEnabled = !chat.webSearchEnabled;
+    persistChats();
+  } else {
+    state.draft.webSearchEnabled = !state.draft.webSearchEnabled;
+  }
   renderWebSearchUI();
 }
 
@@ -148,7 +162,7 @@ async function checkProxyStatus(){
   const btn = document.getElementById('webSearchToggleBtn');
   if(!btn) return;
   const chat = getCurrentChat();
-  const enabled = !!(chat && chat.webSearchEnabled);
+  const enabled = chat ? !!chat.webSearchEnabled : !!state.draft.webSearchEnabled;
   if(!enabled){
     btn.classList.remove('proxy-error');
     btn.title = 'Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)';
@@ -176,6 +190,8 @@ function onModelSelect2Change(value){
   if(chat){
     chat.compareModel = value;
     persistChats();
+  } else {
+    state.draft.compareModel = value;
   }
 }
 
@@ -191,4 +207,3 @@ function onModelSelectChange(value){
   renderModelListSettings();
   checkConnection();
 }
-

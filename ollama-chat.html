@@ -63,6 +63,8 @@
     color:var(--text-primary);
     padding:6px 8px 14px 8px;
     letter-spacing:0.2px;
+    cursor:pointer;
+    user-select:none;
   }
   .new-chat-btn{
     display:flex; align-items:center; gap:8px;
@@ -73,6 +75,14 @@
     transition:background .15s ease;
   }
   .new-chat-btn:hover{ background:var(--accent-hover); }
+  .home-btn{
+    display:flex; align-items:center; gap:8px;
+    width:100%; text-align:left; background:none; border:none;
+    color:var(--text-secondary); font-size:13.5px; padding:8px;
+    border-radius:8px; cursor:pointer; margin-bottom:6px;
+  }
+  .home-btn:hover{ background:rgba(0,0,0,0.05); color:var(--text-primary); }
+  .home-btn.active{ background:var(--bg-elevated); box-shadow:0 0 0 1px var(--border); color:var(--text-primary); }
   .chat-list{
     flex:1; min-height:0; overflow-y:auto;
     display:flex; flex-direction:column; gap:2px;
@@ -454,7 +464,8 @@
 
 <div class="app">
   <div class="sidebar">
-    <div class="brand">Local Chat</div>
+    <div class="brand" onclick="goHome()" title="Go to Home">Local Chat</div>
+    <button class="home-btn" id="homeBtn" onclick="goHome()" title="Start fresh: pick a model, preset, or web search before your first message">⌂ Home</button>
     <button class="new-chat-btn" onclick="newChat()">+ New chat</button>
     <div class="chat-list" id="chatList"></div>
     <div class="sidebar-footer">
@@ -580,6 +591,11 @@ let state = {
   addingPreset: false,
   editingPresetId: null,
   autoScroll: true,   // whether new content should pull the view down with it
+  // Holds preset/web-search/compare choices made on the "Home" screen,
+  // i.e. before any chat exists yet. Applied to the chat the moment it's
+  // actually created (see sendMessage), then reset by resetDraft() the
+  // next time the user lands back on Home. See resetDraft() below.
+  draft: { promptPresetId: null, webSearchEnabled: false, compare: false, compareModel: null, compareMode: 'simultaneous' },
 };
 
 function load(){
@@ -691,6 +707,20 @@ function makeNewChat(){
     compareMode: 'simultaneous',
     promptPresetId: null,
     webSearchEnabled: false
+  };
+}
+
+// Resets the Home-screen draft (preset/web-search/compare choices made
+// before any chat exists) back to defaults. Called whenever the user lands
+// on Home, so Home always starts from a clean slate rather than remembering
+// whatever was left over from the last visit.
+function resetDraft(){
+  state.draft = {
+    promptPresetId: null,
+    webSearchEnabled: false,
+    compare: false,
+    compareModel: null,
+    compareMode: 'simultaneous'
   };
 }
 </script>
@@ -1027,15 +1057,24 @@ function buildHistoryForModel(chat, model){
   return history;
 }
 
-function newChat(){
+// Shows the blank "Home" screen: no chat selected, and nothing has been
+// created yet. The user can pick a model, an instruction preset, and
+// toggle web search/compare right here before ever sending a message --
+// those choices live in state.draft and only become a real chat (with a
+// sidebar entry) once the first message is actually sent, see
+// sendMessage() in chat-send.js. This is also what "+ New chat" does: a
+// chat is only worth a sidebar slot once it has something in it.
+function goHome(){
   if(state.streaming) return;
-  const chat = makeNewChat();
-  state.chats.unshift(chat);
-  state.currentId = chat.id;
-  persistChats();
+  state.currentId = null;
+  resetDraft();
   renderChatList();
   renderMessages();
   renderModelSelect();
+}
+
+function newChat(){
+  goHome();
 }
 
 function selectChat(id){
@@ -1065,6 +1104,9 @@ function deleteChat(id, ev){
 }
 
 function renderChatList(){
+  const homeBtn = document.getElementById('homeBtn');
+  if(homeBtn) homeBtn.classList.toggle('active', state.currentId === null);
+
   const el = document.getElementById('chatList');
   el.innerHTML = '';
   state.chats.forEach(chat => {
@@ -1375,13 +1417,14 @@ function renderModelSelect(){
 // --- Instruction preset dropdown (topbar) ---
 // Mirrors the model select's pattern: each chat remembers its own preset
 // choice, defaulting to "None", changeable at any time (not locked at
-// chat creation).
+// chat creation). When there's no current chat yet (the Home screen),
+// this reads/writes state.draft instead, see onPromptSelectChange.
 function renderPromptSelect(){
   const select = document.getElementById('promptSelect');
   if(!select) return;
   const chat = getCurrentChat();
   const presets = state.settings.promptPresets || [];
-  const currentId = chat ? chat.promptPresetId : null;
+  const currentId = chat ? chat.promptPresetId : state.draft.promptPresetId;
 
   let options = `<option value=""${!currentId ? ' selected' : ''}>No instructions</option>`;
   options += presets.map(p =>
@@ -1394,35 +1437,43 @@ function renderPromptSelect(){
     options += `<option value="${escapeHtml(currentId)}" selected>(deleted preset)</option>`;
   }
   select.innerHTML = options;
-  select.disabled = !chat;
+  // Always usable: with no chat yet, this edits state.draft, which gets
+  // applied to the chat that's created on first send.
+  select.disabled = false;
 }
 
 function onPromptSelectChange(value){
   const chat = getCurrentChat();
-  if(!chat) return;
-  chat.promptPresetId = value || null;
-  persistChats();
+  if(chat){
+    chat.promptPresetId = value || null;
+    persistChats();
+  } else {
+    state.draft.promptPresetId = value || null;
+  }
 }
 
 // --- Compare mode (feature: side-by-side model comparison) ---
+// Same Home-screen pattern as the preset dropdown: with no chat selected,
+// this reads/writes state.draft rather than a chat object.
 function renderCompareUI(){
   const chat = getCurrentChat();
   const btn = document.getElementById('compareToggleBtn');
   const modeSelect = document.getElementById('compareModeSelect');
   const select2 = document.getElementById('modelSelect2');
   const models = state.settings.models || [];
-  const enabled = !!(chat && chat.compare);
+  const source = chat || state.draft;
+  const enabled = !!source.compare;
 
   btn.classList.toggle('active', enabled);
-  btn.disabled = !chat;
+  btn.disabled = false;
   modeSelect.style.display = enabled ? '' : 'none';
   select2.style.display = enabled ? '' : 'none';
 
   if(!enabled) return;
 
-  modeSelect.value = chat.compareMode === 'sequential' ? 'sequential' : 'simultaneous';
+  modeSelect.value = source.compareMode === 'sequential' ? 'sequential' : 'simultaneous';
 
-  const currentB = chat.compareModel;
+  const currentB = source.compareModel;
   let options = models.map(m =>
     `<option value="${escapeHtml(m)}"${m === currentB ? ' selected' : ''}>${escapeHtml(m)}</option>`
   ).join('');
@@ -1435,17 +1486,17 @@ function renderCompareUI(){
 
 function toggleCompareMode(){
   const chat = getCurrentChat();
-  if(!chat) return;
-  chat.compare = !chat.compare;
-  if(chat.compare && !chat.compareModel){
-    const primary = resolveActiveModel(chat);
+  const target = chat || state.draft;
+  target.compare = !target.compare;
+  if(target.compare && !target.compareModel){
+    const primary = chat ? resolveActiveModel(chat) : state.settings.activeModel;
     const candidates = (state.settings.models || []).filter(m => m !== primary);
-    chat.compareModel = candidates[0] || primary || null;
+    target.compareModel = candidates[0] || primary || null;
   }
-  if(chat.compare && !chat.compareMode){
-    chat.compareMode = 'simultaneous';
+  if(target.compare && !target.compareMode){
+    target.compareMode = 'simultaneous';
   }
-  persistChats();
+  if(chat) persistChats();
   renderCompareUI();
 }
 
@@ -1458,29 +1509,34 @@ function toggleCompareMode(){
 // comfortably fit two models in memory at once.
 function onCompareModeChange(value){
   const chat = getCurrentChat();
-  if(!chat) return;
-  chat.compareMode = value === 'sequential' ? 'sequential' : 'simultaneous';
-  persistChats();
+  const target = chat || state.draft;
+  target.compareMode = value === 'sequential' ? 'sequential' : 'simultaneous';
+  if(chat) persistChats();
 }
 
 // --- Web search toggle (per-chat, like Compare mode) ---
 // Wikipedia lookup needs no toggle, it works with no setup and is always
 // offered to the model. This toggle only controls web_search/web_fetch,
-// since those need the local CORS proxy running.
+// since those need the local CORS proxy running. Same Home-screen/draft
+// pattern as the preset dropdown and Compare toggle above.
 function renderWebSearchUI(){
   const btn = document.getElementById('webSearchToggleBtn');
   if(!btn) return;
   const chat = getCurrentChat();
-  btn.classList.toggle('active', !!(chat && chat.webSearchEnabled));
-  btn.disabled = !chat;
+  const enabled = chat ? !!chat.webSearchEnabled : !!state.draft.webSearchEnabled;
+  btn.classList.toggle('active', enabled);
+  btn.disabled = false;
   checkProxyStatus();
 }
 
 function toggleWebSearch(){
   const chat = getCurrentChat();
-  if(!chat) return;
-  chat.webSearchEnabled = !chat.webSearchEnabled;
-  persistChats();
+  if(chat){
+    chat.webSearchEnabled = !chat.webSearchEnabled;
+    persistChats();
+  } else {
+    state.draft.webSearchEnabled = !state.draft.webSearchEnabled;
+  }
   renderWebSearchUI();
 }
 
@@ -1493,7 +1549,7 @@ async function checkProxyStatus(){
   const btn = document.getElementById('webSearchToggleBtn');
   if(!btn) return;
   const chat = getCurrentChat();
-  const enabled = !!(chat && chat.webSearchEnabled);
+  const enabled = chat ? !!chat.webSearchEnabled : !!state.draft.webSearchEnabled;
   if(!enabled){
     btn.classList.remove('proxy-error');
     btn.title = 'Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)';
@@ -1521,6 +1577,8 @@ function onModelSelect2Change(value){
   if(chat){
     chat.compareModel = value;
     persistChats();
+  } else {
+    state.draft.compareModel = value;
   }
 }
 
@@ -1914,7 +1972,16 @@ async function sendMessage(){
 
   let chat = getCurrentChat();
   if(!chat){
+    // Nothing existed yet (Home screen) -- this first message is what
+    // actually creates the chat and earns it a sidebar slot. Whatever the
+    // user configured on Home (preset, web search, compare) via
+    // state.draft gets carried over onto the new chat here.
     chat = makeNewChat();
+    chat.promptPresetId = state.draft.promptPresetId;
+    chat.webSearchEnabled = state.draft.webSearchEnabled;
+    chat.compare = state.draft.compare;
+    chat.compareModel = state.draft.compareModel;
+    chat.compareMode = state.draft.compareMode;
     state.chats.unshift(chat);
     state.currentId = chat.id;
     renderModelSelect();

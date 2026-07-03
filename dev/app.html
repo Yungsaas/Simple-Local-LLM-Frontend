@@ -11,7 +11,8 @@
 
 <div class="app">
   <div class="sidebar">
-    <div class="brand">Local Chat</div>
+    <div class="brand" onclick="goHome()" title="Go to Home">Local Chat</div>
+    <button class="home-btn" id="homeBtn" onclick="goHome()" title="Start fresh: pick a model, preset, or web search before your first message">⌂ Home</button>
     <button class="new-chat-btn" onclick="newChat()">+ New chat</button>
     <div class="chat-list" id="chatList"></div>
     <div class="sidebar-footer">

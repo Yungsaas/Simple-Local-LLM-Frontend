@@ -21,35 +21,67 @@ A simple local LLM frontend with no fancy features. Everything about your chats 
 ## Set-Up
 
 ### 1. Install Ollama and a model
-Download Ollama and install a local LLM of your choice, this an be done through a command line or through the ollama app.
-After installing a local LLM, you need to change the OLLAMA_ORIGINS variable to `*` to ensure that the site can reach ollama.
-To do this, do the following in a command console (cmd for windows, Terminal for mac):
 
-#### Windows
-After installing, on windows, run these commands to kill all ollama processes first: 
+Download and install [Ollama](https://ollama.com) (via the app or the command line), then pull at least one model.
 
-`taskkill /F /IM "ollama app.exe" /T` and `taskkill /F /IM ollama.exe /T`
+By default, Ollama blocks web pages from talking to it (a CORS restriction), which stops this app from reaching it even once it's running. You need to set the `OLLAMA_ORIGINS` environment variable to `*` to allow this.
 
-then run 
+There are two ways to do this: **temporarily** (only lasts until you close the terminal/restart your computer, needs to be redone each time) or **permanently** (set once, survives restarts). Instructions for both are below.
 
-`set OLLAMA_ORIGINS=*`
+#### Temporary (do this each time you want to use the app)
 
-to ensure the site can reach ollama
-and finally serve ollama with 
+**Windows** (Command Prompt):
+```cmd
+taskkill /F /IM "ollama app.exe" /T
+taskkill /F /IM ollama.exe /T
+set OLLAMA_ORIGINS=*
+ollama serve
+```
+The two `taskkill` commands close any already-running copy of Ollama first, since it starts automatically on login and otherwise blocks the port. Leave the resulting window open while you use the chat app; closing it stops Ollama.
 
-`ollama serve`
+**Mac** (Terminal):
+```bash
+killall Ollama
+OLLAMA_ORIGINS=* ollama serve
+```
+Same idea: this closes the running Ollama app first, then restarts it with the setting applied. Leave the terminal window open while you use the chat app.
 
-#### Mac
-After installing, on MAC, run
+#### Permanent (set once, no need to repeat)
 
-`killall Ollama`
+**Windows:**
+1. Press `Win`, search for **"Edit the system environment variables"**, and open it.
+2. Click **Environment Variables…**
+3. Under **User variables**, click **New…**
+4. Variable name: `OLLAMA_ORIGINS`, Variable value: `*`
+5. Click OK on all dialogs.
+6. Quit Ollama completely (right-click its icon in the system tray → Quit) and reopen it. It will now always start with this setting, including after a reboot.
 
-and then
-
-`OLLAMA_ORIGINS=* ollama serve`
-
-to ensure the site can reach ollama
-
+**Mac:**
+Run this once in Terminal:
+```bash
+mkdir -p ~/Library/LaunchAgents
+cat > ~/Library/LaunchAgents/setenv.OLLAMA_ORIGINS.plist << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>setenv.OLLAMA_ORIGINS</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/launchctl</string>
+    <string>setenv</string>
+    <string>OLLAMA_ORIGINS</string>
+    <string>*</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+EOF
+launchctl load ~/Library/LaunchAgents/setenv.OLLAMA_ORIGINS.plist
+```
+This applies the setting immediately and also every time you log in from now on. Quit Ollama (`killall Ollama`) and reopen it once for it to take effect.
 
 - If you want the model to use Wikipedia lookup or web search, it needs to support **tool/function calling**, this is a per-model capability in Ollama, not something this app or the proxy can add. Models like Llama 3.1+, Qwen 2.5+/3, Gemma 4, and Mistral Nemo support it; some smaller or older models don't, and will simply ignore the tools if asked.
 

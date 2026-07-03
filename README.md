@@ -25,6 +25,7 @@ Download Ollama and install a local LLM of your choice, this an be done through 
 After installing a local LLM, you need to change the OLLAMA_ORIGINS variable to `*` to ensure that the site can reach ollama.
 To do this, do the following in a command console (cmd for windows, Terminal for mac):
 
+#### Windows
 After installing, on windows, run these commands to kill all ollama processes first: 
 
 `taskkill /F /IM "ollama app.exe" /T` and `taskkill /F /IM ollama.exe /T`
@@ -38,7 +39,7 @@ and finally serve ollama with
 
 `ollama serve`
 
-
+#### Mac
 After installing, on MAC, run
 
 `killall Ollama`

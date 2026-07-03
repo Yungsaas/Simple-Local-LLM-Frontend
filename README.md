@@ -15,8 +15,8 @@ A simple local LLM frontend with no fancy features. Everything about your chats 
 
 ## Requirements
 - [Ollama](https://ollama.com) installed and running locally, with at least one model pulled
-- A Chromium-based browser (Chrome, Edge, Brave, Opera) if you want to save chats to a local folder, optional, see [Step 5](#5-optional-local-save-folder)
-- Python 3 if you want to enable live web search, optional, see [Step 3](#3-optional-web-access)
+- (Optional) Python 3 if you want to enable live web search, see [Step 3](#3-optional-web-access)
+- (Optional) A Chromium-based browser (Chrome, Edge, Brave, Opera) if you want to save chats to a local folder, see [Step 5](#5-optional-local-save-folder)
 
 ## Set-Up
 

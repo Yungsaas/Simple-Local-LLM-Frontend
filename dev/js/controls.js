@@ -158,6 +158,14 @@ function toggleWebSearch(){
 // it. Runs when web search is toggled, when switching to a chat that has it
 // on, and periodically while active, so a down proxy surfaces before a tool
 // call fails mid-turn.
+//
+// lastKnownProxyState tracks 'ok' | 'error' | null so the toast below only
+// fires on the *transition* into failure, not on every 15s poll while it
+// stays down -- the red button is the persistent signal, the toast is just
+// the one-time heads-up. Reset to null whenever the toggle is off, so
+// turning web search back on always gets a fresh check.
+let lastKnownProxyState = null;
+
 async function checkProxyStatus(){
   const btn = document.getElementById('webSearchToggleBtn');
   if(!btn) return;
@@ -166,6 +174,7 @@ async function checkProxyStatus(){
   if(!enabled){
     btn.classList.remove('proxy-error');
     btn.title = 'Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)';
+    lastKnownProxyState = null;
     return;
   }
   const proxy = state.settings.corsProxyUrl || DEFAULT_CORS_PROXY;
@@ -177,9 +186,18 @@ async function checkProxyStatus(){
     await fetch(proxy);
     btn.classList.remove('proxy-error');
     btn.title = 'Web search is on. Local CORS proxy is running.';
+    lastKnownProxyState = 'ok';
   }catch(e){
     btn.classList.add('proxy-error');
     btn.title = `Web search is on, but the local CORS proxy isn't reachable at ${proxy}.\nStart it with: python3 local_cors_proxy.py`;
+    if(lastKnownProxyState !== 'error'){
+      showToast({
+        type: 'error',
+        title: "Can't reach the web search proxy",
+        body: `Nothing is answering at ${proxy}. Start it by double-clicking start-proxy-windows.bat (Windows) or start-proxy-mac.command (Mac), or run "python3 local_cors_proxy.py" from a terminal.`
+      });
+    }
+    lastKnownProxyState = 'error';
   }finally{
     btn.classList.remove('proxy-checking');
   }

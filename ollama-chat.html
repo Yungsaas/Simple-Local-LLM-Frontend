@@ -458,11 +458,52 @@
 
   ::-webkit-scrollbar{ width:8px; }
   ::-webkit-scrollbar-thumb{ background:rgba(0,0,0,0.15); border-radius:4px; }
+
+  /* Toast notifications */
+  .toast-container{
+    position:fixed; top:64px; right:20px; z-index:200;
+    display:flex; flex-direction:column; gap:8px;
+    width:280px; max-width:calc(100vw - 40px);
+    pointer-events:none;
+  }
+  .toast{
+    pointer-events:auto;
+    background:var(--bg-elevated); border:1px solid var(--border);
+    border-radius:10px; padding:10px 10px 10px 12px;
+    box-shadow:0 4px 18px rgba(0,0,0,0.14);
+    display:flex; align-items:flex-start; gap:6px;
+    animation:toast-in .15s ease;
+  }
+  .toast.toast-error{ border-color:var(--danger); }
+  .toast.toast-hide{
+    opacity:0; transform:translateX(8px);
+    transition:opacity .2s ease, transform .2s ease;
+  }
+  @keyframes toast-in{
+    from{ opacity:0; transform:translateX(8px); }
+    to{ opacity:1; transform:translateX(0); }
+  }
+  .toast-content{ flex:1; min-width:0; }
+  .toast-title{
+    font-size:12.5px; font-weight:600; color:var(--text-primary);
+    margin-bottom:2px; line-height:1.4;
+  }
+  .toast.toast-error .toast-title{ color:var(--danger); }
+  .toast-body{
+    font-size:12px; color:var(--text-secondary); line-height:1.5;
+  }
+  .toast-close{
+    border:none; background:none; color:var(--text-secondary); cursor:pointer;
+    font-size:11px; padding:3px 5px; border-radius:5px; flex-shrink:0;
+    line-height:1;
+  }
+  .toast-close:hover{ background:rgba(0,0,0,0.06); color:var(--text-primary); }
 </style>
 </head>
 <body>
 
 <div class="app">
+  <div class="toast-container" id="toastContainer"></div>
   <div class="sidebar">
     <div class="brand" onclick="goHome()" title="Go to Home">Local Chat</div>
     <button class="home-btn" id="homeBtn" onclick="goHome()" title="Start fresh: pick a model, preset, or web search before your first message">⌂ Home</button>
@@ -1385,6 +1426,75 @@ function updateScrollBottomBtn(){
 }
 </script>
 <script>
+// =====================================================================
+// Toast notifications
+//
+// Small, non-intrusive popups anchored top-right, just under the topbar.
+// Each one auto-dismisses after `duration` ms, or immediately if the user
+// clicks its close (✕) button. Meant for things worth a heads-up without
+// interrupting whatever the user is doing (unlike the settings modal's
+// error/info banners, which sit inline and require attention).
+//
+// Only ever fed hardcoded, developer-written strings (never raw user or
+// model content), so title/body are set via textContent throughout --
+// there's no HTML injection surface here, but this also means callers
+// can't sneak in markup, which is intentional: keep toasts short and plain.
+// =====================================================================
+
+const TOAST_DEFAULT_DURATION_MS = 7000;
+
+// showToast({ type: 'info'|'error', title, body, duration }) -> the toast's
+// DOM element (in case a caller ever wants to dismiss it early itself).
+function showToast(opts){
+  const { type = 'info', title = '', body = '', duration = TOAST_DEFAULT_DURATION_MS } = opts || {};
+  const container = document.getElementById('toastContainer');
+  if(!container) return null;
+
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'error' ? ' toast-error' : '');
+
+  const content = document.createElement('div');
+  content.className = 'toast-content';
+  if(title){
+    const titleEl = document.createElement('div');
+    titleEl.className = 'toast-title';
+    titleEl.textContent = title;
+    content.appendChild(titleEl);
+  }
+  if(body){
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'toast-body';
+    bodyEl.textContent = body;
+    content.appendChild(bodyEl);
+  }
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'toast-close';
+  closeBtn.type = 'button';
+  closeBtn.setAttribute('aria-label', 'Dismiss');
+  closeBtn.textContent = '✕';
+
+  el.appendChild(content);
+  el.appendChild(closeBtn);
+  container.appendChild(el);
+
+  const timer = setTimeout(() => dismissToast(el), duration);
+  // Manual close should cancel the pending auto-dismiss, otherwise it'd
+  // harmlessly fire a second time against an already-removed element, not
+  // dangerous, just needless work.
+  closeBtn.onclick = () => { clearTimeout(timer); dismissToast(el); };
+
+  return el;
+}
+
+// Fades a toast out, then removes it from the DOM once the transition ends.
+function dismissToast(el){
+  if(!el || !el.parentElement) return;
+  el.classList.add('toast-hide');
+  setTimeout(() => el.remove(), 200);
+}
+</script>
+<script>
 // --- Model dropdown (topbar) ---
 function renderModelSelect(){
   const select = document.getElementById('modelSelect');
@@ -1545,6 +1655,14 @@ function toggleWebSearch(){
 // it. Runs when web search is toggled, when switching to a chat that has it
 // on, and periodically while active, so a down proxy surfaces before a tool
 // call fails mid-turn.
+//
+// lastKnownProxyState tracks 'ok' | 'error' | null so the toast below only
+// fires on the *transition* into failure, not on every 15s poll while it
+// stays down -- the red button is the persistent signal, the toast is just
+// the one-time heads-up. Reset to null whenever the toggle is off, so
+// turning web search back on always gets a fresh check.
+let lastKnownProxyState = null;
+
 async function checkProxyStatus(){
   const btn = document.getElementById('webSearchToggleBtn');
   if(!btn) return;
@@ -1553,6 +1671,7 @@ async function checkProxyStatus(){
   if(!enabled){
     btn.classList.remove('proxy-error');
     btn.title = 'Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)';
+    lastKnownProxyState = null;
     return;
   }
   const proxy = state.settings.corsProxyUrl || DEFAULT_CORS_PROXY;
@@ -1564,9 +1683,18 @@ async function checkProxyStatus(){
     await fetch(proxy);
     btn.classList.remove('proxy-error');
     btn.title = 'Web search is on. Local CORS proxy is running.';
+    lastKnownProxyState = 'ok';
   }catch(e){
     btn.classList.add('proxy-error');
     btn.title = `Web search is on, but the local CORS proxy isn't reachable at ${proxy}.\nStart it with: python3 local_cors_proxy.py`;
+    if(lastKnownProxyState !== 'error'){
+      showToast({
+        type: 'error',
+        title: "Can't reach the web search proxy",
+        body: `Nothing is answering at ${proxy}. Start it by double-clicking start-proxy-windows.bat (Windows) or start-proxy-mac.command (Mac), or run "python3 local_cors_proxy.py" from a terminal.`
+      });
+    }
+    lastKnownProxyState = 'error';
   }finally{
     btn.classList.remove('proxy-checking');
   }

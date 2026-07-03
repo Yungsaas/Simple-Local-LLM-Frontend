@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Local Chat</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">Local Chat</div>
+    <button class="new-chat-btn" onclick="newChat()">+ New chat</button>
+    <div class="chat-list" id="chatList"></div>
+    <div class="sidebar-footer">
+      <button class="settings-btn" id="themeToggleBtn" onclick="toggleTheme()">☾ Dark mode</button>
+      <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <span><span class="conn-dot" id="connDot"></span><span id="connLabel">Checking connection…</span></span>
+      <div class="topbar-right">
+        <select class="model-select" id="promptSelect" onchange="onPromptSelectChange(this.value)" title="Instructions for this chat"></select>
+        <button class="compare-toggle-btn" id="webSearchToggleBtn" onclick="toggleWebSearch()" title="Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)">Web search</button>
+        <button class="compare-toggle-btn" id="compareToggleBtn" onclick="toggleCompareMode()" title="Send each message to two models side-by-side">⇄ Compare</button>
+        <select class="model-select" id="compareModeSelect" style="display:none;" onchange="onCompareModeChange(this.value)" title="Run both models at once, or one after the other">
+          <option value="simultaneous">Together</option>
+          <option value="sequential">One at a time</option>
+        </select>
+        <select class="model-select" id="modelSelect2" style="display:none;" onchange="onModelSelect2Change(this.value)"></select>
+        <select class="model-select" id="modelSelect" onchange="onModelSelectChange(this.value)"></select>
+      </div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="messages-inner" id="messagesInner">
+        <div class="empty-state" id="emptyState">
+          <h2>What's on your mind?</h2>
+          <p>Chatting with your local Ollama model. Nothing leaves your machine.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="jumpToBottom()" style="display:none;">↓ New output</button>
+      <div class="composer-inner">
+        <textarea id="input" placeholder="Message your model…" rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="handleSendClick()">↑</button>
+      </div>
+      <div class="hint">Enter to send · Shift+Enter for a new line</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal" style="display:none;">
+  <div class="modal">
+    <h3>Settings</h3>
+    <div id="settingsError"></div>
+    <div class="field">
+      <label>Ollama server URL</label>
+      <input type="text" id="baseUrlInput" placeholder="http://localhost:11434">
+    </div>
+    <div class="field">
+      <div class="model-list-header">
+        <label style="margin:0;">Models</label>
+        <div class="header-actions">
+          <button class="detect-models-btn" id="detectModelsBtn" onclick="detectModels()" title="Detect models installed on the server">⟳ Detect installed</button>
+          <button class="add-model-btn" onclick="toggleAddModelRow()" title="Add model">+</button>
+        </div>
+      </div>
+      <div class="model-list" id="modelList"></div>
+    </div>
+    <div class="field">
+      <div class="model-list-header">
+        <label style="margin:0;">Instruction presets <span class="field-hint">(optional system prompts, pick one per chat)</span></label>
+        <div class="header-actions">
+          <button class="add-model-btn" onclick="togglePresetForm()" title="Add preset">+</button>
+        </div>
+      </div>
+      <div class="model-list" id="presetList"></div>
+    </div>
+    <div class="field">
+      <label>Reasoning effort <span class="field-hint">(thinking models only, some models may ignore this)</span></label>
+      <select class="field-select" id="thinkLevelInput">
+        <option value="default">Default</option>
+        <option value="off">Off, skip thinking entirely</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="max">Max</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Max response length <span class="field-hint">(tokens, thinking + reply combined, hard stop if a model loops)</span></label>
+      <input type="number" id="maxTokensInput" placeholder="No limit" min="1" step="1">
+    </div>
+    <div class="field">
+      <label>CORS proxy <span class="field-hint">(a script you run yourself on localhost, see local_cors_proxy.py, so web_search/web_fetch never route through a third party)</span></label>
+      <input type="text" id="corsProxyInput" placeholder="http://127.0.0.1:8765/?url=">
+    </div>
+    <div class="field">
+      <label>Chat storage</label>
+      <div id="storageSettings"></div>
+      <input type="file" id="importFileInput" accept="application/json" style="display:none;" onchange="handleImportFile(event)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="cancelSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script src="js/state.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/chat-core.js"></script>
+<script src="js/render.js"></script>
+<script src="js/controls.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/chat-send.js"></script>
+<script src="js/init.js"></script>
+</body>
+</html>

@@ -22,10 +22,15 @@ A simple local LLM frontend with no fancy features. Everything about your chats 
 
 ### 1. Install Ollama and a model
 Download Ollama and install a local LLM of your choice.
-After installing, run 
-`set OLLAMA_ORIGINS=*`
+
+After installing, on windows, run these commands to kill all ollama processes first: `taskkill /F /IM "ollama app.exe" /T` and `taskkill /F /IM ollama.exe /T`
+then run `set OLLAMA_ORIGINS=*` to ensure the site can reach ollama
+and finally serve ollama with `ollama serve`
+
+After installing, on MAC, run
+`killall Ollama`
 and then
-`ollama serve`
+`OLLAMA_ORIGINS=* ollama serve`
 to ensure the site can reach ollama
 
 - If you want the model to use Wikipedia lookup or web search, it needs to support **tool/function calling**, this is a per-model capability in Ollama, not something this app or the proxy can add. Models like Llama 3.1+, Qwen 2.5+/3, Gemma 4, and Mistral Nemo support it; some smaller or older models don't, and will simply ignore the tools if asked.

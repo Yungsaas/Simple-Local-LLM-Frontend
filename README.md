@@ -21,7 +21,9 @@ A simple local LLM frontend with no fancy features. Everything about your chats 
 ## Set-Up
 
 ### 1. Install Ollama and a model
-Download Ollama and install a local LLM of your choice.
+Download Ollama and install a local LLM of your choice, this an be done through a command line or through the ollama app.
+After installing a local LLM, you need to change the OLLAMA_ORIGINS variable to `*` to ensure that the site can reach ollama.
+To do this, do the following in a command console (cmd for windows, Terminal for mac):
 
 After installing, on windows, run these commands to kill all ollama processes first: 
 

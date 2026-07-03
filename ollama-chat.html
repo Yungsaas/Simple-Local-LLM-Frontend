@@ -1,0 +1,2396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Local Chat</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<style>
+  :root{
+    --bg: #F5F4EE;
+    --bg-sidebar: #ECE9DF;
+    --bg-elevated: #FFFFFF;
+    --accent: #C96442;
+    --accent-hover: #B14F30;
+    --text-primary: #3D3929;
+    --text-secondary: #85817A;
+    --border: #E1DDD0;
+    --user-bubble: #E8E4D8;
+    --code-bg: #2B2822;
+    --danger: #B3492F;
+    --danger-strong: #8A2E1C;
+  }
+  html[data-theme="dark"]{
+    --bg: #1E1E1C;
+    --bg-sidebar: #181816;
+    --bg-elevated: #292824;
+    --accent: #D97757;
+    --accent-hover: #E28B6D;
+    --text-primary: #ECE8DD;
+    --text-secondary: #948F82;
+    --border: #3A3935;
+    --user-bubble: #34332D;
+    --code-bg: #14130F;
+    --danger: #E0685A;
+    --danger-strong: #A6382A;
+  }
+  *{ box-sizing:border-box; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text-primary);
+    transition:background .15s ease, color .15s ease;
+    overflow:hidden;
+  }
+  .app{ display:flex; height:100vh; overflow:hidden; }
+
+  /* Sidebar */
+  .sidebar{
+    width:270px; flex-shrink:0;
+    background:var(--bg-sidebar);
+    border-right:1px solid var(--border);
+    display:flex; flex-direction:column;
+    padding:14px 10px;
+    min-height:0;
+  }
+  .brand{
+    font-family:Georgia,'Iowan Old Style',serif;
+    font-size:18px; font-weight:600;
+    color:var(--text-primary);
+    padding:6px 8px 14px 8px;
+    letter-spacing:0.2px;
+  }
+  .new-chat-btn{
+    display:flex; align-items:center; gap:8px;
+    background:var(--accent); color:#fff;
+    border:none; border-radius:10px;
+    padding:10px 14px; font-size:14px; font-weight:500;
+    cursor:pointer; margin-bottom:14px;
+    transition:background .15s ease;
+  }
+  .new-chat-btn:hover{ background:var(--accent-hover); }
+  .chat-list{
+    flex:1; min-height:0; overflow-y:auto;
+    display:flex; flex-direction:column; gap:2px;
+  }
+  .chat-item{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:6px; padding:9px 10px; border-radius:8px;
+    cursor:pointer; font-size:13.5px; color:var(--text-primary);
+    white-space:nowrap; overflow:hidden;
+  }
+  .chat-item:hover{ background:rgba(0,0,0,0.05); }
+  .chat-item.active{ background:var(--bg-elevated); box-shadow:0 0 0 1px var(--border); }
+  .chat-title{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .chat-delete{
+    opacity:0; border:none; background:none; color:var(--text-secondary);
+    cursor:pointer; font-size:14px; padding:2px 4px; border-radius:4px;
+  }
+  .chat-item:hover .chat-delete{ opacity:1; }
+  .chat-delete:hover{ color:var(--danger); background:rgba(0,0,0,0.06); }
+
+  .sidebar-footer{
+    border-top:1px solid var(--border);
+    padding-top:10px; margin-top:8px;
+    font-size:12px; color:var(--text-secondary);
+  }
+  .settings-btn{
+    width:100%; text-align:left; background:none; border:none;
+    color:var(--text-secondary); font-size:13px; padding:8px;
+    border-radius:8px; cursor:pointer; display:flex; align-items:center; gap:8px;
+  }
+  .settings-btn:hover{ background:rgba(0,0,0,0.05); color:var(--text-primary); }
+
+  /* Main */
+  .main{ flex:1; display:flex; flex-direction:column; min-width:0; min-height:0; background:var(--bg); }
+  .topbar{
+    padding:14px 24px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+    font-size:13px; color:var(--text-secondary);
+    gap:12px;
+  }
+  .topbar-right{ display:flex; align-items:center; gap:8px; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; }
+  .compare-toggle-btn{
+    background:var(--bg-elevated); border:1px solid var(--border);
+    padding:6px 14px; border-radius:20px; font-size:12.5px;
+    color:var(--text-secondary); cursor:pointer; white-space:nowrap;
+    transition:background .15s ease, color .15s ease, border-color .15s ease;
+  }
+  .compare-toggle-btn:hover{ border-color:var(--text-secondary); color:var(--text-primary); }
+  .compare-toggle-btn.active{
+    background:var(--accent); border-color:var(--accent); color:#fff;
+  }
+  .compare-toggle-btn.active:hover{ background:var(--accent-hover); border-color:var(--accent-hover); }
+  .compare-toggle-btn.proxy-error{
+    background:var(--danger-strong); border-color:var(--danger-strong); color:#fff;
+  }
+  .compare-toggle-btn.proxy-error:hover{ background:var(--danger-strong); border-color:var(--danger-strong); }
+  @keyframes proxy-checking-pulse{
+    0%, 100%{ opacity:1; }
+    50%{ opacity:.45; }
+  }
+  .compare-toggle-btn.proxy-checking{
+    animation:proxy-checking-pulse 1s ease-in-out infinite;
+  }
+  .model-select{
+    background:var(--bg-elevated); border:1px solid var(--border);
+    padding:6px 30px 6px 14px; border-radius:20px; font-size:12.5px;
+    color:var(--text-primary); cursor:pointer; outline:none;
+    appearance:none; -webkit-appearance:none; -moz-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2385817A' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 12px center;
+    font-family:inherit; max-width:220px; text-overflow:ellipsis;
+  }
+  .model-select:hover{ border-color:var(--text-secondary); }
+  .model-select:disabled{ color:var(--text-secondary); cursor:not-allowed; }
+  .conn-dot{ width:7px; height:7px; border-radius:50%; display:inline-block; margin-right:6px; background:#9A9A9A; }
+  .conn-dot.ok{ background:#4C9A5A; }
+  .conn-dot.err{ background:var(--danger); }
+
+  .messages{
+    flex:1; min-height:0; overflow-y:auto; padding:24px 0;
+  }
+  .messages-inner{ max-width:760px; margin:0 auto; padding:0 24px; }
+  .messages-inner.wide{ max-width:1120px; }
+  .scroll-bottom-btn{
+    position:absolute; left:50%; bottom:100%; transform:translateX(-50%);
+    margin-bottom:14px;
+    display:flex; align-items:center; gap:6px;
+    background:var(--bg-elevated); border:1px solid var(--border);
+    color:var(--text-primary); font-size:12.5px;
+    padding:7px 16px; border-radius:20px; cursor:pointer;
+    box-shadow:0 2px 10px rgba(0,0,0,0.1);
+    z-index:5;
+  }
+  .scroll-bottom-btn:hover{ border-color:var(--text-secondary); }
+
+  .empty-state{
+    max-width:600px; margin:60px auto; text-align:center; color:var(--text-secondary);
+  }
+  .empty-state h2{
+    font-family:Georgia,'Iowan Old Style',serif; color:var(--text-primary); font-weight:600;
+    font-size:24px; margin-bottom:8px;
+  }
+
+  .msg-row{ display:flex; margin-bottom:22px; }
+  .msg-row.user{ justify-content:flex-end; }
+  .msg-row.compare-row{ display:flex; gap:20px; align-items:flex-start; }
+  .compare-col{ flex:1; min-width:0; }
+  .compare-col-header{
+    font-size:11.5px; font-weight:600; color:var(--text-secondary);
+    margin-bottom:6px; padding-bottom:6px; border-bottom:1px solid var(--border);
+    text-transform:uppercase; letter-spacing:0.3px;
+  }
+  .msg-meta{
+    font-size:11px; color:var(--text-secondary); margin-top:6px;
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+  .msg-meta:empty{ display:none; }
+  .msg-bubble{
+    max-width:78%; padding:12px 16px; border-radius:16px;
+    font-size:15px; line-height:1.6; white-space:pre-wrap; word-wrap:break-word;
+  }
+  .msg-row.user .msg-bubble{ background:var(--user-bubble); border-bottom-right-radius:4px; }
+  .msg-row.assistant .msg-bubble{ background:transparent; padding-left:0; max-width:100%; }
+  .msg-bubble p{ margin:0 0 10px 0; }
+  .msg-bubble p:last-child{ margin-bottom:0; }
+  .msg-bubble > *:last-child{ margin-bottom:0; }
+  .msg-bubble pre{
+    background:var(--code-bg); color:#F0EEE6; padding:12px 14px; border-radius:10px;
+    overflow-x:auto; font-size:13px; margin:10px 0; position:relative;
+  }
+  .msg-bubble code{ font-family:'SF Mono',Menlo,Consolas,monospace; }
+  .msg-bubble :not(pre) > code{
+    background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px; font-size:0.9em;
+  }
+  .msg-bubble h1,.msg-bubble h2,.msg-bubble h3,.msg-bubble h4{
+    font-family:Georgia,'Iowan Old Style',serif; color:var(--text-primary);
+    font-weight:600; line-height:1.3; margin:18px 0 8px 0;
+  }
+  .msg-bubble h1:first-child,.msg-bubble h2:first-child,
+  .msg-bubble h3:first-child,.msg-bubble h4:first-child{ margin-top:0; }
+  .msg-bubble h1{ font-size:22px; }
+  .msg-bubble h2{ font-size:19px; }
+  .msg-bubble h3{ font-size:16.5px; }
+  .msg-bubble h4{ font-size:15px; }
+  .msg-bubble ul,.msg-bubble ol{ margin:0 0 10px 0; padding-left:22px; }
+  .msg-bubble li{ margin-bottom:4px; line-height:1.6; }
+  .msg-bubble li > ul, .msg-bubble li > ol{ margin-top:4px; }
+  .msg-bubble blockquote{
+    margin:10px 0; padding:2px 14px; border-left:3px solid var(--accent);
+    color:var(--text-secondary);
+  }
+  .msg-bubble blockquote p:last-child{ margin-bottom:0; }
+  .msg-bubble hr{ border:none; border-top:1px solid var(--border); margin:16px 0; }
+  .msg-bubble a{ color:var(--accent); text-decoration:underline; text-underline-offset:2px; }
+  .msg-bubble a:hover{ color:var(--accent-hover); }
+  .table-wrap{ overflow-x:auto; margin:10px 0; }
+  .msg-bubble table{ border-collapse:collapse; font-size:14px; width:100%; }
+  .msg-bubble th,.msg-bubble td{ border:1px solid var(--border); padding:6px 12px; text-align:left; }
+  .msg-bubble th{ background:rgba(0,0,0,0.03); font-weight:600; }
+  .msg-bubble .katex{ font-size:1.05em; }
+  .msg-bubble .katex-display{ margin:12px 0; overflow-x:auto; overflow-y:hidden; }
+  .copy-btn{
+    position:absolute; top:6px; right:8px; background:rgba(255,255,255,0.1);
+    border:none; color:#F0EEE6; font-size:11px; padding:3px 8px; border-radius:6px; cursor:pointer;
+  }
+  .copy-btn:hover{ background:rgba(255,255,255,0.2); }
+
+  .typing-dots{ display:inline-flex; gap:3px; padding:0 0 0 6px; vertical-align:middle; }
+  .typing-dots span{
+    width:5px; height:5px; border-radius:50%; background:var(--text-secondary);
+    animation:blink 1.2s infinite ease-in-out;
+  }
+  .typing-dots span:nth-child(2){ animation-delay:.2s; }
+  .typing-dots span:nth-child(3){ animation-delay:.4s; }
+  @keyframes blink{ 0%,80%,100%{opacity:.25;} 40%{opacity:1;} }
+
+  .thinking-block{
+    margin-bottom:10px; border:1px solid var(--border); border-radius:10px;
+    background:rgba(0,0,0,0.02);
+  }
+  .thinking-block summary{
+    cursor:pointer; padding:8px 12px; font-size:12.5px; color:var(--text-secondary);
+    list-style:none; display:flex; align-items:center; user-select:none;
+  }
+  .thinking-block summary::-webkit-details-marker{ display:none; }
+  .thinking-block summary::before{ content:'▸'; margin-right:6px; font-size:10px; }
+  .thinking-block[open] summary::before{ content:'▾'; }
+  .thinking-text{
+    padding:0 14px 12px 14px; font-size:13px; color:var(--text-secondary);
+    line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere;
+  }
+  .tool-log-entry{ margin-bottom:10px; }
+  .tool-log-entry:last-child{ margin-bottom:0; }
+  .tool-log-entry strong{ color:var(--text-primary); font-weight:600; font-size:12.5px; overflow-wrap:anywhere; }
+  .tool-log-preview{
+    margin-top:4px; padding:8px 10px; background:rgba(0,0,0,0.03);
+    border-radius:6px; font-size:12px; white-space:pre-wrap; overflow-wrap:anywhere;
+    max-height:120px; overflow-y:auto;
+  }
+
+  .composer{
+    padding:16px 24px 20px; border-top:1px solid var(--border);
+    position:relative;
+  }
+  .composer-inner{
+    max-width:760px; margin:0 auto;
+    background:var(--bg-elevated); border:1px solid var(--border);
+    border-radius:20px; padding:8px 8px 8px 18px;
+    display:flex; align-items:flex-end; gap:8px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+  }
+  .composer-inner textarea{
+    flex:1; border:none; outline:none; resize:none;
+    font-size:15px; font-family:inherit; line-height:1.5;
+    max-height:200px; padding:8px 0; background:transparent; color:var(--text-primary);
+  }
+  .send-btn{
+    background:var(--accent); border:none; color:#fff; width:36px; height:36px;
+    border-radius:50%; cursor:pointer; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    transition:background .15s ease;
+  }
+  .send-btn:hover{ background:var(--accent-hover); }
+  .send-btn:disabled{ background:#D8D4C8; cursor:not-allowed; }
+  .stop-btn{
+    background:var(--text-primary);
+  }
+  .hint{ text-align:center; font-size:11.5px; color:var(--text-secondary); margin-top:8px; }
+
+  /* Modal */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.35);
+    display:flex; align-items:center; justify-content:center; z-index:50;
+  }
+  .modal{
+    background:var(--bg-elevated); border-radius:14px; padding:24px;
+    width:380px; max-width:90vw; box-shadow:0 10px 40px rgba(0,0,0,0.2);
+    max-height:88vh; overflow-y:auto;
+  }
+  .modal h3{ margin:0 0 16px 0; font-family:Georgia,serif; font-size:18px; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:12.5px; color:var(--text-secondary); margin-bottom:5px; }
+  .field-hint{ font-weight:400; opacity:0.8; }
+  .field-select{
+    width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px;
+    font-size:14px; outline:none; background:var(--bg); color:var(--text-primary);
+    font-family:inherit; cursor:pointer;
+  }
+  .field-select:focus{ border-color:var(--accent); }
+  .storage-status{
+    font-size:13px; color:var(--text-primary); margin-bottom:10px;
+    padding:10px 12px; background:rgba(0,0,0,0.03); border-radius:8px;
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .storage-status .folder-name{ font-weight:600; }
+  .storage-buttons{ display:flex; gap:8px; flex-wrap:wrap; }
+  .storage-buttons .btn{ padding:7px 12px; font-size:12.5px; }
+  .field input{
+    width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px;
+    font-size:14px; outline:none; background:var(--bg); color:var(--text-primary);
+  }
+  .field input::placeholder{ color:var(--text-secondary); }
+  .field input:focus{ border-color:var(--accent); }
+  .model-list-header{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:6px;
+  }
+  .model-list-header label{ font-size:12.5px; color:var(--text-secondary); }
+  .add-model-btn{
+    background:none; border:1px solid var(--border); width:22px; height:22px;
+    border-radius:6px; cursor:pointer; font-size:15px; line-height:1;
+    color:var(--text-primary); display:flex; align-items:center; justify-content:center;
+    padding:0;
+  }
+  .add-model-btn:hover{ background:rgba(0,0,0,0.05); border-color:var(--text-secondary); }
+  .model-list-header .header-actions{ display:flex; gap:6px; }
+  .detect-models-btn{
+    background:none; border:1px solid var(--border); height:22px;
+    border-radius:6px; cursor:pointer; font-size:12px; line-height:1;
+    color:var(--text-primary); display:flex; align-items:center; justify-content:center;
+    padding:0 8px; gap:5px; white-space:nowrap;
+  }
+  .detect-models-btn:hover{ background:rgba(0,0,0,0.05); border-color:var(--text-secondary); }
+  .detect-models-btn:disabled{ opacity:0.6; cursor:default; }
+  .detect-models-btn .spin{ display:inline-block; animation:spin 0.8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .info-banner{
+    background:#EAF3EC; color:#3E7C59; border:1px solid #CFE6D6;
+    padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:16px;
+  }
+  .model-list{
+    border:1px solid var(--border); border-radius:8px; margin-bottom:14px;
+    max-height:190px; overflow-y:auto;
+  }
+  .model-row{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:6px; padding:8px 10px; cursor:pointer; font-size:13.5px;
+    border-bottom:1px solid var(--border);
+  }
+  .model-row:last-child{ border-bottom:none; }
+  .model-row:hover{ background:rgba(0,0,0,0.04); }
+  .model-row.active{ background:var(--user-bubble); font-weight:600; }
+  .model-row .model-name{
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1;
+    display:flex; align-items:center; gap:6px;
+  }
+  .model-row .model-check{ color:var(--accent); font-size:13px; width:14px; flex-shrink:0; }
+  .model-row .model-unregistered{ font-size:11px; color:var(--text-secondary); font-weight:400; }
+  .model-delete{
+    opacity:0; border:none; background:none; color:var(--text-secondary);
+    cursor:pointer; font-size:13px; padding:2px 5px; border-radius:4px; flex-shrink:0;
+  }
+  .model-row:hover .model-delete{ opacity:1; }
+  .model-delete:hover{ color:var(--danger); background:rgba(0,0,0,0.06); }
+  .model-empty{ padding:14px 10px; font-size:13px; color:var(--text-secondary); text-align:center; }
+  .add-model-row{ display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); }
+  .add-model-row input{
+    flex:1; border:1px solid var(--border); border-radius:6px; padding:6px 8px;
+    font-size:13px; outline:none; background:var(--bg); color:var(--text-primary);
+  }
+  .add-model-row input::placeholder{ color:var(--text-secondary); }
+  .add-model-row input:focus{ border-color:var(--accent); }
+  .add-model-row button{
+    font-size:12px; padding:0 10px; border-radius:6px; border:none;
+    background:var(--accent); color:#fff; cursor:pointer;
+  }
+  .add-model-row button:hover{ background:var(--accent-hover); }
+  .preset-form{
+    padding:10px; border-bottom:1px solid var(--border);
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .preset-form input, .preset-form textarea{
+    border:1px solid var(--border); border-radius:6px; padding:7px 9px;
+    font-size:13px; outline:none; background:var(--bg); color:var(--text-primary);
+    font-family:inherit; resize:vertical;
+  }
+  .preset-form textarea{ min-height:80px; line-height:1.5; }
+  .preset-form input::placeholder, .preset-form textarea::placeholder{ color:var(--text-secondary); }
+  .preset-form input:focus, .preset-form textarea:focus{ border-color:var(--accent); }
+  .preset-form-actions{ display:flex; justify-content:flex-end; gap:6px; }
+  .preset-form-actions button{
+    font-size:12px; padding:6px 12px; border-radius:6px; border:none; cursor:pointer;
+  }
+  .preset-form-actions .save-btn{ background:var(--accent); color:#fff; }
+  .preset-form-actions .save-btn:hover{ background:var(--accent-hover); }
+  .preset-form-actions .cancel-btn{ background:none; color:var(--text-secondary); }
+  .preset-form-actions .cancel-btn:hover{ background:rgba(0,0,0,0.05); }
+  .preset-row{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:6px; padding:8px 10px; cursor:pointer; font-size:13.5px;
+    border-bottom:1px solid var(--border);
+  }
+  .preset-row:last-child{ border-bottom:none; }
+  .preset-row:hover{ background:rgba(0,0,0,0.04); }
+  .preset-row .preset-title{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .preset-delete{
+    opacity:0; border:none; background:none; color:var(--text-secondary);
+    cursor:pointer; font-size:13px; padding:2px 5px; border-radius:4px; flex-shrink:0;
+  }
+  .preset-row:hover .preset-delete{ opacity:1; }
+  .preset-delete:hover{ color:var(--danger); background:rgba(0,0,0,0.06); }
+  .preset-empty{ padding:14px 10px; font-size:13px; color:var(--text-secondary); text-align:center; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
+  .btn{ padding:8px 16px; border-radius:8px; border:none; font-size:13.5px; cursor:pointer; }
+  .btn-secondary{ background:transparent; color:var(--text-secondary); }
+  .btn-secondary:hover{ background:rgba(0,0,0,0.05); }
+  .btn-primary{ background:var(--accent); color:#fff; }
+  .btn-primary:hover{ background:var(--accent-hover); }
+  .error-banner{
+    background:#FBEBE6; color:var(--danger); border:1px solid #F0CFC4;
+    padding:10px 14px; border-radius:10px; font-size:13px; margin-bottom:16px;
+  }
+
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:rgba(0,0,0,0.15); border-radius:4px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">Local Chat</div>
+    <button class="new-chat-btn" onclick="newChat()">+ New chat</button>
+    <div class="chat-list" id="chatList"></div>
+    <div class="sidebar-footer">
+      <button class="settings-btn" id="themeToggleBtn" onclick="toggleTheme()">☾ Dark mode</button>
+      <button class="settings-btn" onclick="openSettings()">⚙ Settings</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <span><span class="conn-dot" id="connDot"></span><span id="connLabel">Checking connection…</span></span>
+      <div class="topbar-right">
+        <select class="model-select" id="promptSelect" onchange="onPromptSelectChange(this.value)" title="Instructions for this chat"></select>
+        <button class="compare-toggle-btn" id="webSearchToggleBtn" onclick="toggleWebSearch()" title="Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)">Web search</button>
+        <button class="compare-toggle-btn" id="compareToggleBtn" onclick="toggleCompareMode()" title="Send each message to two models side-by-side">⇄ Compare</button>
+        <select class="model-select" id="compareModeSelect" style="display:none;" onchange="onCompareModeChange(this.value)" title="Run both models at once, or one after the other">
+          <option value="simultaneous">Together</option>
+          <option value="sequential">One at a time</option>
+        </select>
+        <select class="model-select" id="modelSelect2" style="display:none;" onchange="onModelSelect2Change(this.value)"></select>
+        <select class="model-select" id="modelSelect" onchange="onModelSelectChange(this.value)"></select>
+      </div>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="messages-inner" id="messagesInner">
+        <div class="empty-state" id="emptyState">
+          <h2>What's on your mind?</h2>
+          <p>Chatting with your local Ollama model. Nothing leaves your machine.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <button class="scroll-bottom-btn" id="scrollBottomBtn" onclick="jumpToBottom()" style="display:none;">↓ New output</button>
+      <div class="composer-inner">
+        <textarea id="input" placeholder="Message your model…" rows="1"></textarea>
+        <button class="send-btn" id="sendBtn" onclick="handleSendClick()">↑</button>
+      </div>
+      <div class="hint">Enter to send · Shift+Enter for a new line</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal" style="display:none;">
+  <div class="modal">
+    <h3>Settings</h3>
+    <div id="settingsError"></div>
+    <div class="field">
+      <label>Ollama server URL</label>
+      <input type="text" id="baseUrlInput" placeholder="http://localhost:11434">
+    </div>
+    <div class="field">
+      <div class="model-list-header">
+        <label style="margin:0;">Models</label>
+        <div class="header-actions">
+          <button class="detect-models-btn" id="detectModelsBtn" onclick="detectModels()" title="Detect models installed on the server">⟳ Detect installed</button>
+          <button class="add-model-btn" onclick="toggleAddModelRow()" title="Add model">+</button>
+        </div>
+      </div>
+      <div class="model-list" id="modelList"></div>
+    </div>
+    <div class="field">
+      <div class="model-list-header">
+        <label style="margin:0;">Instruction presets <span class="field-hint">(optional system prompts, pick one per chat)</span></label>
+        <div class="header-actions">
+          <button class="add-model-btn" onclick="togglePresetForm()" title="Add preset">+</button>
+        </div>
+      </div>
+      <div class="model-list" id="presetList"></div>
+    </div>
+    <div class="field">
+      <label>Reasoning effort <span class="field-hint">(thinking models only — some models may ignore this)</span></label>
+      <select class="field-select" id="thinkLevelInput">
+        <option value="default">Default</option>
+        <option value="off">Off — skip thinking entirely</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="max">Max</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Max response length <span class="field-hint">(tokens, thinking + reply combined — hard stop if a model loops)</span></label>
+      <input type="number" id="maxTokensInput" placeholder="No limit" min="1" step="1">
+    </div>
+    <div class="field">
+      <label>CORS proxy <span class="field-hint">(a script you run yourself on localhost — see local_cors_proxy.py — so web_search/web_fetch never route through a third party)</span></label>
+      <input type="text" id="corsProxyInput" placeholder="http://127.0.0.1:8765/?url=">
+    </div>
+    <div class="field">
+      <label>Chat storage</label>
+      <div id="storageSettings"></div>
+      <input type="file" id="importFileInput" accept="application/json" style="display:none;" onchange="handleImportFile(event)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="cancelSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script>
+const STORAGE_KEY = 'ollama_chat_sessions_v1';
+const SETTINGS_KEY = 'ollama_chat_settings_v1';
+
+// Default CORS proxy: a script the user runs on localhost (local_cors_proxy.py)
+// so web_search/web_fetch never route through a third party. Defined once here
+// and reused everywhere the default is needed.
+const DEFAULT_CORS_PROXY = 'http://127.0.0.1:8765/?url=';
+
+let state = {
+  chats: [],        // {id, title, model, messages:[{role,content}], createdAt, compare, compareModel}
+  currentId: null,
+  settings: { baseUrl: 'http://localhost:11434', models: ['gemma4:e4b'], activeModel: 'gemma4:e4b', theme: 'light', thinkLevel: 'default', maxTokens: null, useLocalFile: false, promptPresets: [], corsProxyUrl: DEFAULT_CORS_PROXY },
+  streaming: false,
+  abortControllers: [],
+  addingModel: false,
+  addingPreset: false,
+  editingPresetId: null,
+  autoScroll: true,   // whether new content should pull the view down with it
+};
+
+function load(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    state.chats = raw ? JSON.parse(raw) : [];
+  }catch(e){ state.chats = []; }
+  // Migrate the old combined "web browsing" toggle (which used to gate
+  // Wikipedia lookup too) onto the new field name, which now only gates
+  // the proxy-dependent web_search/web_fetch tools. Wikipedia lookup no
+  // longer has a toggle at all — it's always available.
+  state.chats.forEach(chat => {
+    if(chat && chat.webBrowsingEnabled !== undefined && chat.webSearchEnabled === undefined){
+      chat.webSearchEnabled = chat.webBrowsingEnabled;
+    }
+    delete chat.webBrowsingEnabled;
+    // Chats saved before sequential compare existed always ran simultaneously
+    // — preserve that behavior for them rather than silently switching their
+    // existing compare chats to the new sequential default.
+    if(chat && chat.compare && !chat.compareMode){
+      chat.compareMode = 'simultaneous';
+    }
+  });
+  try{
+    const s = localStorage.getItem(SETTINGS_KEY);
+    if(s) state.settings = JSON.parse(s);
+  }catch(e){}
+  // Migrate old single-model settings shape { baseUrl, model } to { baseUrl, models, activeModel }
+  if(!Array.isArray(state.settings.models)){
+    const legacyModel = state.settings.model || 'gemma4:e4b';
+    state.settings.models = [legacyModel];
+    state.settings.activeModel = legacyModel;
+    delete state.settings.model;
+    persistSettings();
+  }
+  if(!state.settings.activeModel && state.settings.models.length){
+    state.settings.activeModel = state.settings.models[0];
+  }
+  if(!state.settings.theme){
+    state.settings.theme = 'light';
+  }
+  if(!state.settings.thinkLevel){
+    state.settings.thinkLevel = 'default';
+  }
+  if(state.settings.maxTokens === undefined){
+    state.settings.maxTokens = null;
+  }
+  if(state.settings.useLocalFile === undefined){
+    state.settings.useLocalFile = false;
+  }
+  if(!Array.isArray(state.settings.promptPresets)){
+    state.settings.promptPresets = [];
+  }
+  // Move anyone still on one of the old public proxies (or with none set) onto
+  // the local-only default, so a now-defunct third-party proxy isn't left
+  // silently active for users who never touched the setting.
+  const RETIRED_PUBLIC_PROXY_DEFAULTS = [
+    'https://api.allorigins.win/raw?url=',
+    'https://api.codetabs.com/v1/proxy?quest=',
+    'https://corsproxy.io/?url='
+  ];
+  if(!state.settings.corsProxyUrl || RETIRED_PUBLIC_PROXY_DEFAULTS.includes(state.settings.corsProxyUrl)){
+    state.settings.corsProxyUrl = DEFAULT_CORS_PROXY;
+  }
+  applyTheme();
+}
+
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', state.settings.theme === 'dark' ? 'dark' : 'light');
+  const btn = document.getElementById('themeToggleBtn');
+  if(btn){
+    btn.textContent = state.settings.theme === 'dark' ? '☀ Light mode' : '☾ Dark mode';
+  }
+}
+
+function toggleTheme(){
+  state.settings.theme = state.settings.theme === 'dark' ? 'light' : 'dark';
+  persistSettings();
+  applyTheme();
+}
+
+function persistChats(){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.chats));
+  if(saveDirHandle) writeJSONFile('chats.json', state.chats);
+}
+function persistSettings(){
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+}
+
+// Chat IDs need to be safe to compare across devices/browsers for the local
+// save-file and import/export reconciliation logic — a plain timestamp could
+// theoretically collide if two chats are created in the same millisecond on
+// different machines, so we add a random suffix.
+function newChatId(){
+  return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+// A fresh chat in its default state. Used both by the "New chat" button and
+// by the first message sent into an empty app.
+function makeNewChat(){
+  return {
+    id: newChatId(),
+    title: 'New chat',
+    model: state.settings.activeModel,
+    messages: [],
+    createdAt: Date.now(),
+    compare: false,
+    compareModel: null,
+    compareMode: 'simultaneous',
+    promptPresetId: null,
+    webSearchEnabled: false
+  };
+}
+
+// =====================================================================
+// Local save file (File System Access API) + Export/Import
+//
+// Chats can live in two places: the browser's localStorage (always, as a
+// fast cache/fallback) and, optionally, a real chats.json file the user
+// picks via the browser's folder picker. Settings intentionally never
+// leave localStorage — server URL, registered models, theme etc. are
+// per-device config, not portable data.
+// =====================================================================
+
+let saveDirHandle = null;      // live FileSystemDirectoryHandle once connected+granted this session
+let pendingSaveDirHandle = null; // a remembered handle whose permission needs re-confirming (user gesture required)
+
+const IDB_NAME = 'ollama_chat_fs';
+const IDB_STORE = 'handles';
+
+function idbOpen(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, value){
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet(key){
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbDelete(key){
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function writeJSONFile(name, data){
+  if(!saveDirHandle) return;
+  try{
+    const fileHandle = await saveDirHandle.getFileHandle(name, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(data, null, 2));
+    await writable.close();
+  }catch(e){
+    console.error('Failed writing ' + name, e);
+  }
+}
+// Returns null if the file doesn't exist yet, rather than throwing.
+async function readJSONFile(dirHandle, name){
+  try{
+    const fileHandle = await dirHandle.getFileHandle(name, { create: false });
+    const file = await fileHandle.getFile();
+    const text = await file.text();
+    return text.trim() ? JSON.parse(text) : null;
+  }catch(e){
+    return null;
+  }
+}
+
+// Two chats sharing an ID are safe to auto-merge (keep the longer one) only
+// when one's messages are an exact prefix of the other's — i.e. one is just
+// the other continued further. If they've actually diverged (edited
+// differently in two places before ever syncing), we don't guess: both are
+// kept, with the losing copy renamed so nothing is silently discarded.
+function messagesArePrefix(shorter, longer){
+  if(shorter.length > longer.length) return false;
+  for(let i = 0; i < shorter.length; i++){
+    if(shorter[i].role !== longer[i].role || shorter[i].content !== longer[i].content) return false;
+  }
+  return true;
+}
+
+function chatSize(chat){
+  return (chat.messages || []).reduce((sum, m) => sum + (m.content ? m.content.length : 0), 0);
+}
+
+// Merges two chat lists by id, returning { merged, summary } where summary
+// is a short human-readable description of what happened (for display).
+function reconcileChats(listA, listB){
+  const byId = new Map();
+  let keptFromEach = 0, resolvedSafely = 0, keptBothOnConflict = 0;
+
+  listA.forEach(chat => byId.set(chat.id, chat));
+
+  listB.forEach(incoming => {
+    const existing = byId.get(incoming.id);
+    if(!existing){
+      byId.set(incoming.id, incoming);
+      return;
+    }
+    const existingMsgs = existing.messages || [];
+    const incomingMsgs = incoming.messages || [];
+    if(messagesArePrefix(existingMsgs, incomingMsgs)){
+      byId.set(incoming.id, incoming); // incoming is existing continued further
+      resolvedSafely++;
+    } else if(messagesArePrefix(incomingMsgs, existingMsgs)){
+      // existing already the longer one — keep it, nothing to do
+      resolvedSafely++;
+    } else if(chatSize(existing) === chatSize(incoming) &&
+              existingMsgs.length === incomingMsgs.length &&
+              JSON.stringify(existingMsgs) === JSON.stringify(incomingMsgs)){
+      // genuinely identical — keep either, no conflict
+      resolvedSafely++;
+    } else {
+      // real divergence — keep both under distinct ids
+      const conflictCopy = { ...incoming, id: newChatId(), title: (incoming.title || 'Chat') + ' (conflict copy)' };
+      byId.set(conflictCopy.id, conflictCopy);
+      keptBothOnConflict++;
+    }
+  });
+
+  const merged = Array.from(byId.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const parts = [];
+  if(resolvedSafely) parts.push(`merged ${resolvedSafely} duplicate${resolvedSafely > 1 ? 's' : ''}`);
+  if(keptBothOnConflict) parts.push(`kept both copies of ${keptBothOnConflict} conflicting chat${keptBothOnConflict > 1 ? 's' : ''}`);
+  const summary = parts.length ? parts.join(', ') + '.' : 'no overlapping chats found.';
+  return { merged, summary };
+}
+
+// Connects (or creates) a local save file. Handles all three cases: no file
+// yet, file exists but browser has no chats, or both exist (reconcile).
+async function connectLocalSaveFile(){
+  if(!('showDirectoryPicker' in window)){
+    showSettingsMessage("Your browser doesn't support choosing a local folder (Chrome/Edge/Brave only).", true);
+    return;
+  }
+  try{
+    const dirHandle = await window.showDirectoryPicker({ id: 'ollama-chat-saves', mode: 'readwrite' });
+    const fileChats = await readJSONFile(dirHandle, 'chats.json');
+
+    saveDirHandle = dirHandle;
+    let message;
+
+    if(!fileChats){
+      // Case 1: no file yet — create it from whatever's in the browser now.
+      await writeJSONFile('chats.json', state.chats);
+      message = `Created chats.json in "${dirHandle.name}" with your ${state.chats.length} existing chat(s).`;
+    } else if(!state.chats.length){
+      // Case 2: file exists, browser has nothing — just adopt the file.
+      state.chats = fileChats;
+      message = `Loaded ${fileChats.length} chat(s) from "${dirHandle.name}".`;
+    } else {
+      // Case 3: both exist — reconcile, then write the merged result back.
+      const { merged, summary } = reconcileChats(state.chats, fileChats);
+      state.chats = merged;
+      await writeJSONFile('chats.json', state.chats);
+      message = `Connected to "${dirHandle.name}" — ${summary}`;
+    }
+
+    state.settings.useLocalFile = true;
+    persistChats();
+    persistSettings();
+    await idbSet('saveDir', dirHandle);
+
+    if(!state.chats.find(c => c.id === state.currentId)){
+      state.currentId = state.chats.length ? state.chats[0].id : null;
+    }
+    renderChatList();
+    renderMessages();
+    renderModelSelect();
+    renderStorageSettings();
+    showSettingsMessage(message, false);
+  }catch(err){
+    if(err.name !== 'AbortError'){
+      showSettingsMessage('Could not access that folder: ' + err.message, true);
+    }
+  }
+}
+
+function disconnectLocalSaveFile(){
+  saveDirHandle = null;
+  pendingSaveDirHandle = null;
+  state.settings.useLocalFile = false;
+  persistSettings();
+  idbDelete('saveDir');
+  renderStorageSettings();
+  showSettingsMessage('Disconnected. Chats remain saved in this browser.', false);
+}
+
+async function reconnectLocalSaveFile(){
+  if(!pendingSaveDirHandle) return;
+  try{
+    const perm = await pendingSaveDirHandle.requestPermission({ mode: 'readwrite' });
+    if(perm !== 'granted'){
+      showSettingsMessage('Permission was not granted.', true);
+      return;
+    }
+    saveDirHandle = pendingSaveDirHandle;
+    pendingSaveDirHandle = null;
+    const fileChats = await readJSONFile(saveDirHandle, 'chats.json');
+    if(fileChats) state.chats = fileChats;
+    if(!state.chats.find(c => c.id === state.currentId)){
+      state.currentId = state.chats.length ? state.chats[0].id : null;
+    }
+    renderChatList();
+    renderMessages();
+    renderModelSelect();
+    renderStorageSettings();
+    showSettingsMessage('Reconnected to your local save file.', false);
+  }catch(e){
+    showSettingsMessage('Could not reconnect: ' + e.message, true);
+  }
+}
+
+// On startup, if the user previously opted into local-file mode, try to
+// silently pick the connection back up. Re-granting write permission after
+// the browser restarts needs a real user gesture, so if it's not already
+// 'granted' we surface a one-click "Reconnect" button instead of a file
+// picker (the folder itself is already remembered — this is just a
+// permission re-confirmation).
+async function tryRestoreLocalSaveFile(){
+  if(!state.settings.useLocalFile || !('showDirectoryPicker' in window)) return;
+  try{
+    const dirHandle = await idbGet('saveDir');
+    if(!dirHandle) return;
+    const perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+    if(perm === 'granted'){
+      saveDirHandle = dirHandle;
+      const fileChats = await readJSONFile(dirHandle, 'chats.json');
+      if(fileChats){
+        state.chats = fileChats;
+        if(!state.chats.find(c => c.id === state.currentId)){
+          state.currentId = state.chats.length ? state.chats[0].id : null;
+        }
+        renderChatList();
+        renderMessages();
+        renderModelSelect();
+      }
+    } else {
+      pendingSaveDirHandle = dirHandle;
+    }
+  }catch(e){ /* ignore — falls back to localStorage silently */ }
+  renderStorageSettings();
+}
+
+function exportData(){
+  const payload = { chats: state.chats, exportedAt: Date.now() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ollama-chat-export-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function triggerImport(){
+  document.getElementById('importFileInput').click();
+}
+
+async function handleImportFile(ev){
+  const file = ev.target.files[0];
+  ev.target.value = ''; // reset so re-importing the same file again still fires 'change'
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const importedChats = Array.isArray(data.chats) ? data.chats : [];
+    if(!importedChats.length){
+      showSettingsMessage('That file has no chats in it.', true);
+      return;
+    }
+    // Import only ever touches chat history — never settings — so a stale
+    // backup can't accidentally overwrite this machine's server URL, models,
+    // theme, etc.
+    const { merged, summary } = reconcileChats(state.chats, importedChats);
+    state.chats = merged;
+    persistChats();
+    renderChatList();
+    renderMessages();
+    renderModelSelect();
+    showSettingsMessage(`Imported ${importedChats.length} chat(s) — ${summary}`, false);
+  }catch(e){
+    showSettingsMessage('Could not import that file: ' + e.message, true);
+  }
+}
+
+function getCurrentChat(){
+  return state.chats.find(c => c.id === state.currentId) || null;
+}
+
+// Returns the model that should be used for a given chat: the chat's own
+// remembered model if it has one, otherwise the global last-used model.
+function resolveActiveModel(chat){
+  return (chat && chat.model) || state.settings.activeModel || null;
+}
+
+// Resolves a chat's chosen instruction preset to its current content, or
+// null if the chat has none (or the preset it referenced was since deleted).
+// Resolved fresh each time rather than snapshotted, so editing a preset's
+// wording takes effect for future messages in any chat using it.
+function resolveSystemPrompt(chat){
+  if(!chat || !chat.promptPresetId) return null;
+  const preset = (state.settings.promptPresets || []).find(p => p.id === chat.promptPresetId);
+  return preset ? preset.content : null;
+}
+
+// Builds a fresh, independent history array for one model. In compare mode a
+// turn stores two assistant replies under the same groupId; only the one this
+// model produced is kept, so its context never includes the other model's
+// parallel answer. A new array per call also stops the two concurrent compare
+// requests from cross-contaminating via tool-call round-trips, which append to
+// the array they're handed.
+function buildHistoryForModel(chat, model){
+  const systemPrompt = resolveSystemPrompt(chat);
+  const history = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
+  chat.messages.forEach(m => {
+    if(m.role === 'assistant' && m.groupId && m.model !== model) return;
+    history.push({ role: m.role, content: m.content });
+  });
+  return history;
+}
+
+function newChat(){
+  if(state.streaming) return;
+  const chat = makeNewChat();
+  state.chats.unshift(chat);
+  state.currentId = chat.id;
+  persistChats();
+  renderChatList();
+  renderMessages();
+  renderModelSelect();
+}
+
+function selectChat(id){
+  if(state.streaming) return;
+  state.currentId = id;
+  renderChatList();
+  renderMessages();
+  renderModelSelect();
+  checkConnection();
+}
+
+function deleteChat(id, ev){
+  ev.stopPropagation();
+  // The chat actively streaming a response is always state.currentId (newChat
+  // and selectChat both refuse to change it while streaming), so this is the
+  // one case that needs blocking — deleting it would detach the in-flight
+  // response from state.chats and silently discard it once it finishes.
+  if(state.streaming && id === state.currentId) return;
+  state.chats = state.chats.filter(c => c.id !== id);
+  if(state.currentId === id){
+    state.currentId = state.chats.length ? state.chats[0].id : null;
+  }
+  persistChats();
+  renderChatList();
+  renderMessages();
+  renderModelSelect();
+}
+
+function renderChatList(){
+  const el = document.getElementById('chatList');
+  el.innerHTML = '';
+  state.chats.forEach(chat => {
+    const item = document.createElement('div');
+    item.className = 'chat-item' + (chat.id === state.currentId ? ' active' : '');
+    item.onclick = () => selectChat(chat.id);
+    item.innerHTML = `<span class="chat-title">${escapeHtml(chat.title)}</span>
+      <button class="chat-delete" onclick="deleteChat('${chat.id}', event)">✕</button>`;
+    el.appendChild(item);
+  });
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// --- Full markdown + math rendering (marked + KaTeX, sanitized with DOMPurify) ---
+marked.setOptions({ breaks: true, gfm: true });
+
+function renderMarkdown(text){
+  const mathStore = [];
+
+  // Protect $$...$$ block math first (so its $ signs aren't touched by inline pass)
+  let protectedText = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, expr) => {
+    const idx = mathStore.push({ expr, display: true }) - 1;
+    return `%%MATH${idx}%%`;
+  });
+
+  // Protect $...$ inline math. Heuristic avoids matching bare currency like
+  // "costs $9, and $14" — requires no whitespace touching the delimiters and
+  // no digit right after the closing $ (which would indicate a second price).
+  protectedText = protectedText.replace(
+    /(?<!\\)\$(?!\s)([^\$\n]*?)(?<!\s)\$(?!\d)/g,
+    (m, expr) => {
+      const idx = mathStore.push({ expr, display: false }) - 1;
+      return `%%MATH${idx}%%`;
+    }
+  );
+
+  let html = marked.parse(protectedText);
+
+  // Re-insert math, rendered to HTML by KaTeX
+  html = html.replace(/%%MATH(\d+)%%/g, (m, idx) => {
+    const { expr, display } = mathStore[idx];
+    try{
+      return katex.renderToString(expr, { throwOnError: false, displayMode: display });
+    }catch(e){
+      return escapeHtml(display ? `$$${expr}$$` : `$${expr}$`);
+    }
+  });
+
+  return DOMPurify.sanitize(html, {
+    ADD_TAGS: ['semantics', 'annotation'],
+    ADD_ATTR: ['encoding']
+  });
+}
+
+// Adds a working copy button to every code block and wraps tables so wide
+// ones can scroll horizontally instead of overflowing the bubble.
+function enhanceRenderedContent(container){
+  container.querySelectorAll('pre').forEach(pre => {
+    if(pre.querySelector('.copy-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = 'Copy';
+    btn.onclick = () => copyCode(btn);
+    pre.appendChild(btn);
+  });
+  container.querySelectorAll('table').forEach(table => {
+    if(table.parentElement.classList.contains('table-wrap')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'table-wrap';
+    table.parentElement.insertBefore(wrap, table);
+    wrap.appendChild(table);
+  });
+}
+
+function copyCode(btn){
+  const code = btn.parentElement.querySelector('code').textContent;
+  navigator.clipboard.writeText(code);
+  btn.textContent = 'Copied';
+  setTimeout(() => btn.textContent = 'Copy', 1500);
+}
+
+function renderAssistantContent(msg){
+  let html = '';
+  if(msg.toolLog && msg.toolLog.length){
+    html += renderToolLog(msg.toolLog);
+  }
+  if(msg.thinking){
+    const isDone = !!msg.content || !!msg.stopped;
+    const label = isDone
+      ? 'Thinking'
+      : 'Thinking<span class="typing-dots"><span></span><span></span><span></span></span>';
+    html += `<details class="thinking-block"${isDone ? '' : ' open'}>
+        <summary>${label}</summary>
+        <div class="thinking-text">${escapeHtml(msg.thinking)}</div>
+      </details>`;
+  }
+  if(msg.content){
+    html += renderMarkdown(msg.content);
+  } else if(msg.stopped){
+    html += `<span style="color:var(--text-secondary);">Stopped.</span>`;
+  } else if(msg.queued){
+    html += `<span style="color:var(--text-secondary);">Queued — waiting for the other model to finish…</span>`;
+  } else if(!msg.thinking && !(msg.toolLog && msg.toolLog.length)){
+    html += `<div class="typing-dots"><span></span><span></span><span></span></div>`;
+  }
+  return html;
+}
+
+// Renders the collapsible "used N tools" block showing exactly what was
+// looked up — search queries, URLs fetched, and a short preview of what
+// came back — so tool use is visible and debuggable, not a black box.
+function renderToolLog(toolLog){
+  const stillRunning = toolLog.some(t => t.status === 'running');
+  const labelFor = (t) => {
+    if(t.type === 'wikipedia_lookup') return `Wikipedia: "${escapeHtml(t.args.query || '')}"`;
+    if(t.type === 'web_search') return `Searching: "${escapeHtml(t.args.query || '')}"`;
+    if(t.type === 'web_fetch') return `Fetching: ${escapeHtml(t.args.url || '')}`;
+    return escapeHtml(t.type);
+  };
+  const summary = stillRunning
+    ? `Using tools<span class="typing-dots"><span></span><span></span><span></span></span>`
+    : `Used ${toolLog.length} tool${toolLog.length > 1 ? 's' : ''}`;
+  const body = toolLog.map(t => {
+    const status = t.status === 'running' ? ' …' : (t.status === 'aborted' ? ' (cancelled)' : '');
+    let preview = '';
+    if(t.result){
+      const trimmed = t.result.length > 300 ? t.result.slice(0, 300) + '…' : t.result;
+      preview = `<div class="tool-log-preview">${escapeHtml(trimmed)}</div>`;
+    }
+    return `<div class="tool-log-entry"><strong>${labelFor(t)}${status}</strong>${preview}</div>`;
+  }).join('');
+  return `<details class="thinking-block"${stillRunning ? ' open' : ''}>
+      <summary>${summary}</summary>
+      <div class="thinking-text">${body}</div>
+    </details>`;
+}
+
+// Renders the small "42 tok/s · 1.3s" line shown once a response has
+// finished streaming. showModel adds the model name (used outside compare
+// mode, where the column header doesn't already say which model it is).
+function renderAssistantMeta(msg, showModel){
+  if(!msg.stats) return '';
+  const parts = [];
+  if(showModel && msg.model) parts.push(escapeHtml(msg.model));
+  if(msg.stats.tps) parts.push(`${msg.stats.tps.toFixed(1)} tok/s`);
+  if(msg.stats.ttftMs != null) parts.push(`${(msg.stats.ttftMs/1000).toFixed(1)}s to first token`);
+  if(msg.stats.totalMs != null) parts.push(`${(msg.stats.totalMs/1000).toFixed(1)}s total`);
+  return parts.join(' · ');
+}
+
+function renderMessages(){
+  const inner = document.getElementById('messagesInner');
+  const chat = getCurrentChat();
+  inner.classList.toggle('wide', !!(chat && chat.compare));
+  if(!chat || chat.messages.length === 0){
+    inner.innerHTML = `<div class="empty-state" id="emptyState">
+        <h2>What's on your mind?</h2>
+        <p>Chatting with your local Ollama model. Nothing leaves your machine.</p>
+      </div>`;
+    return;
+  }
+  inner.innerHTML = '';
+  const msgs = chat.messages;
+  let i = 0;
+  while(i < msgs.length){
+    const msg = msgs[i];
+    const next = msgs[i + 1];
+    // Two consecutive assistant messages sharing a groupId are a
+    // compare-mode turn: render them as side-by-side columns.
+    if(msg.role === 'assistant' && msg.groupId && next && next.groupId === msg.groupId){
+      inner.appendChild(buildCompareRow(msg, next, i, i + 1));
+      i += 2;
+      continue;
+    }
+    inner.appendChild(buildMessageRow(msg, i));
+    i += 1;
+  }
+  enhanceRenderedContent(inner);
+  scrollToBottom(true);
+}
+
+function buildMessageRow(msg, index){
+  const row = document.createElement('div');
+  row.className = 'msg-row ' + msg.role;
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.dataset.index = index;
+  bubble.innerHTML = msg.role === 'assistant'
+    ? renderAssistantContent(msg)
+    : renderMarkdown(msg.content);
+  row.appendChild(bubble);
+  if(msg.role === 'assistant'){
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    meta.dataset.metaIndex = index;
+    meta.textContent = renderAssistantMeta(msg, true);
+    row.appendChild(meta);
+  }
+  return row;
+}
+
+function buildCompareRow(msgA, msgB, indexA, indexB){
+  const row = document.createElement('div');
+  row.className = 'msg-row assistant compare-row';
+  [[msgA, indexA], [msgB, indexB]].forEach(([msg, index]) => {
+    const col = document.createElement('div');
+    col.className = 'compare-col';
+    const header = document.createElement('div');
+    header.className = 'compare-col-header';
+    header.textContent = msg.model || 'Model';
+    const bubble = document.createElement('div');
+    bubble.className = 'msg-bubble';
+    bubble.dataset.index = index;
+    bubble.innerHTML = renderAssistantContent(msg);
+    const meta = document.createElement('div');
+    meta.className = 'msg-meta';
+    meta.dataset.metaIndex = index;
+    meta.textContent = renderAssistantMeta(msg, false);
+    col.appendChild(header);
+    col.appendChild(bubble);
+    col.appendChild(meta);
+    row.appendChild(col);
+  });
+  return row;
+}
+
+// Updates a single assistant bubble (by its index in chat.messages) in
+// place. Used for streaming updates so we don't re-render the whole
+// conversation on every token — works the same whether that message is
+// part of a normal turn or one column of a compare-mode turn.
+function updateStreamingBubble(index){
+  const chat = getCurrentChat();
+  if(!chat) return;
+  const msg = chat.messages[index];
+  if(!msg) return;
+  const bubble = document.querySelector(`.msg-bubble[data-index="${index}"]`);
+  if(bubble){
+    bubble.innerHTML = renderAssistantContent(msg);
+    enhanceRenderedContent(bubble);
+  }
+  const meta = document.querySelector(`[data-meta-index="${index}"]`);
+  if(meta){
+    meta.textContent = renderAssistantMeta(msg, !msg.groupId);
+  }
+  scrollToBottom();
+}
+
+// Scrolls the messages pane to the bottom. By default this only happens if
+// the user is already following along (state.autoScroll) — so scrolling up
+// to reread something during a long generation doesn't get yanked back down
+// on every new token. Pass force=true for cases where jumping to the bottom
+// is always the right call (sending a message, switching chats, etc).
+function scrollToBottom(force){
+  const el = document.getElementById('messages');
+  if(!force && !state.autoScroll) return;
+  el.scrollTop = el.scrollHeight;
+  if(force) state.autoScroll = true;
+  updateScrollBottomBtn();
+}
+
+function jumpToBottom(){
+  state.autoScroll = true;
+  scrollToBottom(true);
+}
+
+function updateScrollBottomBtn(){
+  const btn = document.getElementById('scrollBottomBtn');
+  if(!btn) return;
+  btn.style.display = state.autoScroll ? 'none' : 'flex';
+}
+
+// --- Model dropdown (topbar) ---
+function renderModelSelect(){
+  const select = document.getElementById('modelSelect');
+  const chat = getCurrentChat();
+  const current = resolveActiveModel(chat);
+  const models = state.settings.models || [];
+
+  if(!models.length && !current){
+    select.innerHTML = '<option>No models registered</option>';
+    select.disabled = true;
+  } else {
+    select.disabled = false;
+    let options = models.map(m =>
+      `<option value="${escapeHtml(m)}"${m === current ? ' selected' : ''}>${escapeHtml(m)}</option>`
+    ).join('');
+
+    // If the chat's model was since removed from the registry, still show it
+    // (marked as unregistered) so switching chats doesn't silently break.
+    if(current && !models.includes(current)){
+      options += `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (unregistered)</option>`;
+    }
+    select.innerHTML = options;
+  }
+
+  renderCompareUI();
+  renderPromptSelect();
+  renderWebSearchUI();
+}
+
+// --- Instruction preset dropdown (topbar) ---
+// Mirrors the model select's pattern: each chat remembers its own preset
+// choice, defaulting to "None", changeable at any time (not locked at
+// chat creation).
+function renderPromptSelect(){
+  const select = document.getElementById('promptSelect');
+  if(!select) return;
+  const chat = getCurrentChat();
+  const presets = state.settings.promptPresets || [];
+  const currentId = chat ? chat.promptPresetId : null;
+
+  let options = `<option value=""${!currentId ? ' selected' : ''}>No instructions</option>`;
+  options += presets.map(p =>
+    `<option value="${escapeHtml(p.id)}"${p.id === currentId ? ' selected' : ''}>${escapeHtml(p.title)}</option>`
+  ).join('');
+
+  // If the chat references a preset that's since been deleted, still show
+  // it (marked as removed) so the dropdown doesn't silently reset.
+  if(currentId && !presets.find(p => p.id === currentId)){
+    options += `<option value="${escapeHtml(currentId)}" selected>(deleted preset)</option>`;
+  }
+  select.innerHTML = options;
+  select.disabled = !chat;
+}
+
+function onPromptSelectChange(value){
+  const chat = getCurrentChat();
+  if(!chat) return;
+  chat.promptPresetId = value || null;
+  persistChats();
+}
+
+// --- Compare mode (feature: side-by-side model comparison) ---
+function renderCompareUI(){
+  const chat = getCurrentChat();
+  const btn = document.getElementById('compareToggleBtn');
+  const modeSelect = document.getElementById('compareModeSelect');
+  const select2 = document.getElementById('modelSelect2');
+  const models = state.settings.models || [];
+  const enabled = !!(chat && chat.compare);
+
+  btn.classList.toggle('active', enabled);
+  btn.disabled = !chat;
+  modeSelect.style.display = enabled ? '' : 'none';
+  select2.style.display = enabled ? '' : 'none';
+
+  if(!enabled) return;
+
+  modeSelect.value = chat.compareMode === 'sequential' ? 'sequential' : 'simultaneous';
+
+  const currentB = chat.compareModel;
+  let options = models.map(m =>
+    `<option value="${escapeHtml(m)}"${m === currentB ? ' selected' : ''}>${escapeHtml(m)}</option>`
+  ).join('');
+  if(currentB && !models.includes(currentB)){
+    options += `<option value="${escapeHtml(currentB)}" selected>${escapeHtml(currentB)} (unregistered)</option>`;
+  }
+  select2.innerHTML = options || '<option>No models registered</option>';
+  select2.disabled = !models.length;
+}
+
+function toggleCompareMode(){
+  const chat = getCurrentChat();
+  if(!chat) return;
+  chat.compare = !chat.compare;
+  if(chat.compare && !chat.compareModel){
+    const primary = resolveActiveModel(chat);
+    const candidates = (state.settings.models || []).filter(m => m !== primary);
+    chat.compareModel = candidates[0] || primary || null;
+  }
+  if(chat.compare && !chat.compareMode){
+    chat.compareMode = 'simultaneous';
+  }
+  persistChats();
+  renderCompareUI();
+}
+
+// 'simultaneous' (default, matches original behavior) fires both models at
+// once via Promise.allSettled — fastest, but needs enough RAM/VRAM to hold
+// both models loaded at the same time, and either can slow the other down
+// by competing for the same CPU/GPU. 'sequential' runs model A to
+// completion, then model B — slower overall, but only one model is ever
+// loaded/generating at a time, which matters a lot on machines that can't
+// comfortably fit two models in memory at once.
+function onCompareModeChange(value){
+  const chat = getCurrentChat();
+  if(!chat) return;
+  chat.compareMode = value === 'sequential' ? 'sequential' : 'simultaneous';
+  persistChats();
+}
+
+// --- Web search toggle (per-chat, like Compare mode) ---
+// Wikipedia lookup needs no toggle — it works with no setup and is always
+// offered to the model. This toggle only controls web_search/web_fetch,
+// since those need the local CORS proxy running.
+function renderWebSearchUI(){
+  const btn = document.getElementById('webSearchToggleBtn');
+  if(!btn) return;
+  const chat = getCurrentChat();
+  btn.classList.toggle('active', !!(chat && chat.webSearchEnabled));
+  btn.disabled = !chat;
+  checkProxyStatus();
+}
+
+function toggleWebSearch(){
+  const chat = getCurrentChat();
+  if(!chat) return;
+  chat.webSearchEnabled = !chat.webSearchEnabled;
+  persistChats();
+  renderWebSearchUI();
+}
+
+// Reports whether the local CORS proxy is reachable right now — a page can't
+// start or stop a native process, so this only checks it, it can't control
+// it. Runs when web search is toggled, when switching to a chat that has it
+// on, and periodically while active, so a down proxy surfaces before a tool
+// call fails mid-turn.
+async function checkProxyStatus(){
+  const btn = document.getElementById('webSearchToggleBtn');
+  if(!btn) return;
+  const chat = getCurrentChat();
+  const enabled = !!(chat && chat.webSearchEnabled);
+  if(!enabled){
+    btn.classList.remove('proxy-error');
+    btn.title = 'Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)';
+    return;
+  }
+  const proxy = state.settings.corsProxyUrl || DEFAULT_CORS_PROXY;
+  btn.classList.add('proxy-checking');
+  try{
+    // Any response at all (even a 400 for a missing '?url=') proves the
+    // proxy process is up and listening — only a network-level failure
+    // (connection refused, etc.) means it isn't running.
+    await fetch(proxy);
+    btn.classList.remove('proxy-error');
+    btn.title = 'Web search is on. Local CORS proxy is running.';
+  }catch(e){
+    btn.classList.add('proxy-error');
+    btn.title = `Web search is on, but the local CORS proxy isn't reachable at ${proxy}.\nStart it with: python3 local_cors_proxy.py`;
+  }finally{
+    btn.classList.remove('proxy-checking');
+  }
+}
+
+function onModelSelect2Change(value){
+  const chat = getCurrentChat();
+  if(chat){
+    chat.compareModel = value;
+    persistChats();
+  }
+}
+
+function onModelSelectChange(value){
+  const chat = getCurrentChat();
+  if(chat){
+    chat.model = value;
+    persistChats();
+    renderChatList();
+  }
+  state.settings.activeModel = value;
+  persistSettings();
+  renderModelListSettings();
+  checkConnection();
+}
+
+// --- Settings modal ---
+function showSettingsMessage(msg, isError){
+  document.getElementById('settingsError').innerHTML = msg
+    ? `<div class="${isError ? 'error-banner' : 'info-banner'}">${escapeHtml(msg)}</div>`
+    : '';
+}
+
+// Model registry and instruction presets are mutated immediately as the
+// user edits them in the modal (unlike baseUrl/thinkLevel/etc., which only
+// commit on Save) — this snapshot lets Cancel revert those immediate edits
+// too, so "Cancel" means the same thing for every field in the dialog.
+// Local-save-file connect/disconnect is intentionally NOT part of this
+// revert: it has real filesystem/permission side effects that shouldn't be
+// silently undone by closing the dialog.
+let settingsSnapshotOnOpen = null;
+
+function openSettings(){
+  document.getElementById('baseUrlInput').value = state.settings.baseUrl;
+  document.getElementById('thinkLevelInput').value = state.settings.thinkLevel || 'default';
+  document.getElementById('maxTokensInput').value = state.settings.maxTokens || '';
+  document.getElementById('corsProxyInput').value = state.settings.corsProxyUrl || '';
+  showSettingsMessage('');
+  state.addingModel = false;
+  state.addingPreset = false;
+  state.editingPresetId = null;
+  const chatAtOpen = getCurrentChat();
+  settingsSnapshotOnOpen = {
+    models: [...(state.settings.models || [])],
+    activeModel: state.settings.activeModel,
+    promptPresets: JSON.parse(JSON.stringify(state.settings.promptPresets || [])),
+    chatId: chatAtOpen ? chatAtOpen.id : null,
+    chatModel: chatAtOpen ? chatAtOpen.model : null
+  };
+  renderModelListSettings();
+  renderPresetListSettings();
+  renderStorageSettings();
+  document.getElementById('settingsModal').style.display = 'flex';
+}
+function closeSettings(){
+  document.getElementById('settingsModal').style.display = 'none';
+}
+function cancelSettings(){
+  if(settingsSnapshotOnOpen){
+    state.settings.models = settingsSnapshotOnOpen.models;
+    state.settings.activeModel = settingsSnapshotOnOpen.activeModel;
+    state.settings.promptPresets = settingsSnapshotOnOpen.promptPresets;
+    persistSettings();
+    if(settingsSnapshotOnOpen.chatId){
+      const chat = state.chats.find(c => c.id === settingsSnapshotOnOpen.chatId);
+      if(chat && chat.model !== settingsSnapshotOnOpen.chatModel){
+        chat.model = settingsSnapshotOnOpen.chatModel;
+        persistChats();
+      }
+    }
+    renderChatList();
+    renderModelSelect();
+  }
+  settingsSnapshotOnOpen = null;
+  closeSettings();
+}
+
+// Builds the "Chat storage" panel: local-file status + actions when a save
+// file is connected (or needs reconnecting), or Export/Import + the connect
+// button when everything's still browser-only.
+function renderStorageSettings(){
+  const el = document.getElementById('storageSettings');
+  if(!el) return;
+
+  if(state.settings.useLocalFile){
+    if(saveDirHandle){
+      el.innerHTML = `
+        <div class="storage-status"><span>Saving to <span class="folder-name">${escapeHtml(saveDirHandle.name)}</span></span></div>
+        <div class="storage-buttons">
+          <button class="btn btn-secondary" onclick="disconnectLocalSaveFile()">Disconnect</button>
+        </div>`;
+    } else if(pendingSaveDirHandle){
+      el.innerHTML = `
+        <div class="storage-status"><span>⚠ Local save file needs to be reconfirmed</span></div>
+        <div class="storage-buttons">
+          <button class="btn btn-primary" onclick="reconnectLocalSaveFile()">Reconnect</button>
+          <button class="btn btn-secondary" onclick="disconnectLocalSaveFile()">Disconnect</button>
+        </div>`;
+    } else {
+      el.innerHTML = `
+        <div class="storage-status"><span>Local file mode is on, but this browser can't connect to it.</span></div>
+        <div class="storage-buttons">
+          <button class="btn btn-secondary" onclick="disconnectLocalSaveFile()">Turn off local file mode</button>
+        </div>`;
+    }
+  } else {
+    el.innerHTML = `
+      <div class="storage-status"><span>Chats are saved in this browser only.</span></div>
+      <div class="storage-buttons">
+        <button class="btn btn-primary" onclick="connectLocalSaveFile()">Use a local save file…</button>
+        <button class="btn btn-secondary" onclick="exportData()">⬆ Export data</button>
+        <button class="btn btn-secondary" onclick="triggerImport()">⬇ Import data</button>
+      </div>`;
+  }
+}
+function saveSettings(){
+  const baseUrl = document.getElementById('baseUrlInput').value.trim().replace(/\/$/,'');
+  if(!baseUrl){
+    showSettingsMessage('Please enter a server URL.', true);
+    return;
+  }
+  const maxTokensRaw = document.getElementById('maxTokensInput').value.trim();
+  const maxTokens = maxTokensRaw ? parseInt(maxTokensRaw, 10) : null;
+  if(maxTokensRaw && (!Number.isFinite(maxTokens) || maxTokens < 1)){
+    showSettingsMessage('Max response length must be a positive number, or left blank for no limit.', true);
+    return;
+  }
+  state.settings.baseUrl = baseUrl;
+  state.settings.thinkLevel = document.getElementById('thinkLevelInput').value;
+  state.settings.maxTokens = maxTokens;
+  state.settings.corsProxyUrl = document.getElementById('corsProxyInput').value.trim() || DEFAULT_CORS_PROXY;
+  persistSettings();
+  settingsSnapshotOnOpen = null;
+  closeSettings();
+  checkConnection();
+}
+
+// Fetches the list of models Ollama actually has installed and adds any
+// that aren't already in the registry. Never removes existing entries.
+async function detectModels(){
+  const btn = document.getElementById('detectModelsBtn');
+  const baseUrl = document.getElementById('baseUrlInput').value.trim().replace(/\/$/,'') || state.settings.baseUrl;
+  const originalLabel = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin">⟳</span> Detecting…';
+  showSettingsMessage('');
+  try{
+    const res = await fetch(baseUrl + '/api/tags');
+    if(!res.ok) throw new Error('bad response');
+    const data = await res.json();
+    const installed = (data.models || []).map(m => m.name);
+    if(!installed.length){
+      showSettingsMessage('Ollama is reachable but reports no installed models.', true);
+      return;
+    }
+    const added = installed.filter(name => !state.settings.models.includes(name));
+    state.settings.models.push(...added);
+    if(added.length && !state.settings.activeModel){
+      state.settings.activeModel = state.settings.models[0];
+    }
+    persistSettings();
+    renderModelListSettings();
+    renderModelSelect();
+    showSettingsMessage(
+      added.length
+        ? `Added ${added.length} model${added.length > 1 ? 's' : ''}: ${added.join(', ')}`
+        : 'All installed models are already registered.',
+      false
+    );
+  }catch(e){
+    showSettingsMessage(`Couldn't reach Ollama at ${baseUrl} to detect models.`, true);
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = originalLabel;
+  }
+}
+
+// --- Model registry (settings modal list) ---
+function renderModelListSettings(){
+  const el = document.getElementById('modelList');
+  const chat = getCurrentChat();
+  const current = resolveActiveModel(chat);
+  const models = state.settings.models || [];
+  let html = '';
+
+  if(state.addingModel){
+    html += `<div class="add-model-row">
+        <input type="text" id="newModelInput" placeholder="e.g. llama3.1:8b" autofocus>
+        <button onclick="confirmAddModel()">Add</button>
+      </div>`;
+  }
+
+  if(!models.length){
+    html += '<div class="model-empty">No models registered yet.</div>';
+  } else {
+    models.forEach(name => {
+      const isActive = name === current;
+      html += `<div class="model-row${isActive ? ' active' : ''}" onclick="selectModelSettings('${escAttr(name)}')">
+          <span class="model-name">${isActive ? '<span class="model-check">✓</span>' : ''}${escapeHtml(name)}</span>
+          <button class="model-delete" onclick="deleteModelSettings('${escAttr(name)}', event)">✕</button>
+        </div>`;
+    });
+  }
+
+  el.innerHTML = html;
+
+  if(state.addingModel){
+    const input = document.getElementById('newModelInput');
+    input.focus();
+    input.addEventListener('keydown', e => {
+      if(e.key === 'Enter'){ e.preventDefault(); confirmAddModel(); }
+      if(e.key === 'Escape'){ e.preventDefault(); state.addingModel = false; renderModelListSettings(); }
+    });
+  }
+}
+
+// Small helper to safely embed a value inside an inline onclick="'...'"
+// attribute: backslash/single-quote so it can't break out of the JS string
+// literal, and double-quote (as an HTML entity) so it can't break out of the
+// attribute's own double-quote delimiter.
+function escAttr(str){
+  return String(str)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;');
+}
+
+function toggleAddModelRow(){
+  state.addingModel = !state.addingModel;
+  renderModelListSettings();
+}
+
+function confirmAddModel(){
+  const input = document.getElementById('newModelInput');
+  const name = input.value.trim();
+  if(!name) return;
+  if(!state.settings.models.includes(name)){
+    state.settings.models.push(name);
+  }
+  state.settings.activeModel = name;
+  state.addingModel = false;
+  persistSettings();
+  const chat = getCurrentChat();
+  if(chat){ chat.model = name; persistChats(); renderChatList(); }
+  renderModelListSettings();
+  renderModelSelect();
+  checkConnection();
+}
+
+function selectModelSettings(name){
+  onModelSelectChange(name);
+}
+
+function deleteModelSettings(name, ev){
+  ev.stopPropagation();
+  state.settings.models = state.settings.models.filter(m => m !== name);
+  if(state.settings.activeModel === name){
+    state.settings.activeModel = state.settings.models[0] || null;
+  }
+  persistSettings();
+  renderModelListSettings();
+  renderModelSelect();
+  checkConnection();
+}
+
+// --- Instruction presets (settings modal list) ---
+function renderPresetListSettings(){
+  const el = document.getElementById('presetList');
+  const presets = state.settings.promptPresets || [];
+  let html = '';
+
+  if(state.addingPreset){
+    const editing = state.editingPresetId ? presets.find(p => p.id === state.editingPresetId) : null;
+    html += `<div class="preset-form">
+        <input type="text" id="presetTitleInput" placeholder="Title, e.g. Concise coder" value="${escAttr(editing ? editing.title : '')}">
+        <textarea id="presetContentInput" placeholder="Instructions sent to the model as a system prompt...">${escapeHtml(editing ? editing.content : '')}</textarea>
+        <div class="preset-form-actions">
+          <button class="cancel-btn" onclick="cancelPresetForm()">Cancel</button>
+          <button class="save-btn" onclick="confirmSavePreset()">Save</button>
+        </div>
+      </div>`;
+  }
+
+  if(!presets.length){
+    html += '<div class="preset-empty">No instruction presets yet.</div>';
+  } else {
+    presets.forEach(p => {
+      html += `<div class="preset-row" onclick="editPreset('${escAttr(p.id)}')">
+          <span class="preset-title">${escapeHtml(p.title)}</span>
+          <button class="preset-delete" onclick="deletePreset('${escAttr(p.id)}', event)">✕</button>
+        </div>`;
+    });
+  }
+
+  el.innerHTML = html;
+
+  if(state.addingPreset){
+    document.getElementById('presetTitleInput').focus();
+  }
+}
+
+function togglePresetForm(){
+  state.addingPreset = !state.addingPreset;
+  state.editingPresetId = null;
+  renderPresetListSettings();
+}
+
+function editPreset(id){
+  state.addingPreset = true;
+  state.editingPresetId = id;
+  renderPresetListSettings();
+}
+
+function cancelPresetForm(){
+  state.addingPreset = false;
+  state.editingPresetId = null;
+  renderPresetListSettings();
+}
+
+function confirmSavePreset(){
+  const title = document.getElementById('presetTitleInput').value.trim();
+  const content = document.getElementById('presetContentInput').value.trim();
+  if(!title || !content){
+    showSettingsMessage('Both a title and instructions are required.', true);
+    return;
+  }
+  if(!state.settings.promptPresets) state.settings.promptPresets = [];
+
+  if(state.editingPresetId){
+    const preset = state.settings.promptPresets.find(p => p.id === state.editingPresetId);
+    if(preset){ preset.title = title; preset.content = content; }
+  } else {
+    state.settings.promptPresets.push({ id: newChatId().replace('c_', 'p_'), title, content });
+  }
+  state.addingPreset = false;
+  state.editingPresetId = null;
+  persistSettings();
+  renderPresetListSettings();
+  renderPromptSelect();
+}
+
+function deletePreset(id, ev){
+  ev.stopPropagation();
+  state.settings.promptPresets = (state.settings.promptPresets || []).filter(p => p.id !== id);
+  persistSettings();
+  renderPresetListSettings();
+  renderPromptSelect();
+}
+
+// --- Connection check ---
+async function checkConnection(){
+  const dot = document.getElementById('connDot');
+  const label = document.getElementById('connLabel');
+  const model = resolveActiveModel(getCurrentChat());
+  dot.className = 'conn-dot';
+  label.textContent = 'Checking connection…';
+  try{
+    const res = await fetch(state.settings.baseUrl + '/api/tags');
+    if(!res.ok) throw new Error('bad response');
+    const data = await res.json();
+    const names = (data.models || []).map(m => m.name);
+    dot.className = 'conn-dot ok';
+    if(model && names.length && !names.includes(model)){
+      label.textContent = `Connected · model "${model}" not found locally`;
+    } else if(!model){
+      label.textContent = 'Connected · no model selected';
+    } else {
+      label.textContent = 'Connected to Ollama';
+    }
+  }catch(e){
+    dot.className = 'conn-dot err';
+    label.textContent = 'Can\'t reach Ollama — check Settings';
+  }
+}
+
+// --- Sending messages ---
+function handleSendClick(){
+  if(state.streaming){
+    state.abortControllers.forEach(c => c.abort());
+    return;
+  }
+  sendMessage();
+}
+
+async function sendMessage(){
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if(!text) return;
+
+  let chat = getCurrentChat();
+  if(!chat){
+    chat = makeNewChat();
+    state.chats.unshift(chat);
+    state.currentId = chat.id;
+    renderModelSelect();
+  }
+
+  chat.messages.push({ role:'user', content: text });
+  if(chat.title === 'New chat'){
+    chat.title = text.slice(0, 40) + (text.length > 40 ? '…' : '');
+  }
+  input.value = '';
+  autoResize(input);
+  persistChats();
+  renderChatList();
+  renderMessages();
+
+  setStreaming(true);
+  state.abortControllers = [];
+
+  // History is snapshotted *before* pushing the placeholder assistant
+  // message(s) below, so it never includes the not-yet-answered turn.
+  // Built fresh per model via buildHistoryForModel — see its comment for
+  // why that matters in compare mode.
+  if(chat.compare && chat.compareModel){
+    const modelA = resolveActiveModel(chat);
+    const modelB = chat.compareModel;
+    const historyA = buildHistoryForModel(chat, modelA);
+    const historyB = buildHistoryForModel(chat, modelB);
+    const groupId = 'cmp_' + Date.now();
+    const idxA = chat.messages.length;
+    chat.messages.push({ role:'assistant', content:'', thinking:'', model: modelA, groupId });
+    const idxB = chat.messages.length;
+    // In sequential mode B hasn't started yet — `queued` swaps its bubble to
+    // a "Queued" label instead of the typing-dots animation, which would
+    // otherwise misleadingly suggest it's already generating.
+    const sequential = chat.compareMode === 'sequential';
+    chat.messages.push({ role:'assistant', content:'', thinking:'', model: modelB, groupId, queued: sequential });
+    renderMessages();
+
+    const ctrlA = new AbortController();
+    const ctrlB = new AbortController();
+    state.abortControllers.push(ctrlA, ctrlB);
+
+    if(sequential){
+      // Run A fully (including any tool-call round-trips) before starting B.
+      // If the user hits stop during A, ctrlB is already aborted too, so the
+      // fetch() inside B's streamAssistantResponse call rejects immediately
+      // with AbortError instead of actually starting a second generation.
+      await streamAssistantResponse(chat, idxA, modelA, historyA, ctrlA);
+      await streamAssistantResponse(chat, idxB, modelB, historyB, ctrlB);
+    } else {
+      await Promise.allSettled([
+        streamAssistantResponse(chat, idxA, modelA, historyA, ctrlA),
+        streamAssistantResponse(chat, idxB, modelB, historyB, ctrlB)
+      ]);
+    }
+  } else {
+    const model = resolveActiveModel(chat);
+    const history = buildHistoryForModel(chat, model);
+    const idx = chat.messages.length;
+    chat.messages.push({ role:'assistant', content:'', thinking:'', model });
+    renderMessages();
+
+    const ctrl = new AbortController();
+    state.abortControllers.push(ctrl);
+    await streamAssistantResponse(chat, idx, model, history, ctrl);
+  }
+
+  persistChats();
+  renderChatList();
+  setStreaming(false);
+  state.abortControllers = [];
+}
+
+// Translates the "Reasoning effort" setting into the value Ollama's `think`
+// field expects: false for "off", undefined for "default" (the field is then
+// omitted so the model uses its own native default), or a level string
+// ("low"/"medium"/"high"/"max") for models with graded thinking budgets
+// (Qwen3, DeepSeek R1, GPT-OSS, etc). Models that don't recognize a level
+// string typically fall back to their default thinking behavior.
+function resolveThinkValue(){
+  const level = state.settings.thinkLevel || 'default';
+  if(level === 'off') return false;
+  if(level === 'default') return undefined; // omit the field — model uses its own native default
+  return level; // 'low' | 'medium' | 'high' | 'max'
+}
+
+// =====================================================================
+// Wikipedia lookup + web browsing tools
+//
+// Wikipedia's public API (native CORS, no proxy needed) powers reference
+// lookups and is always offered to the model. web_search/web_fetch use a
+// DuckDuckGo lookup routed through a proxy the user runs locally
+// (local_cors_proxy.py, never a public one), so they're gated behind the
+// per-chat "Web search" toggle. Everything else still only talks to the
+// user's local Ollama server.
+// =====================================================================
+
+const MAX_TOOL_ROUNDS = 5;
+const TOOL_MIN_INTERVAL_MS = 1000; // minimum gap between tool calls, human-paced rather than bot-paced
+let lastToolCallTime = 0;
+
+// Always available — no proxy required.
+const WIKIPEDIA_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'wikipedia_lookup',
+      description: 'Look up a topic on Wikipedia for reliable reference/encyclopedic information — established facts, historical events, concepts, definitions. Not for current news or very recent events.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'Topic or question to look up' } },
+        required: ['query']
+      }
+    }
+  }
+];
+
+// Only offered to the model when the chat's "Web search" toggle is on,
+// since these need the local CORS proxy running.
+const WEB_SEARCH_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: 'Search the live web for current information — recent news, current events, or anything not well covered by Wikipedia. Returns several relevant pages with their titles, URLs, and snippets.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'The search query' } },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_fetch',
+      description: 'Fetch the full content of a specific web page by URL — e.g. one found via web_search, or a URL the user provided directly.',
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string', description: 'The full URL to fetch' } },
+        required: ['url']
+      }
+    }
+  }
+];
+
+// Enforces a minimum gap between tool calls — this is an assistive lookup
+// tool making a handful of on-demand requests at human-typing pace, not a
+// bulk scraper, and this keeps it that way regardless of how eagerly a
+// model chains tool calls.
+async function enforceToolRateLimit(signal){
+  const wait = lastToolCallTime + TOOL_MIN_INTERVAL_MS - Date.now();
+  if(wait > 0){
+    await new Promise(resolve => {
+      const t = setTimeout(resolve, wait);
+      if(signal){
+        signal.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+      }
+    });
+  }
+  lastToolCallTime = Date.now();
+}
+
+// Resolves a natural-language query to the best-matching Wikipedia article
+// title. Tries the fast `opensearch` endpoint first (prefix-match only —
+// great for "Mars", but misses phrase-y queries like "Artificial intelligence
+// definition"), then falls back to full-text `list=search`, which matches
+// words anywhere regardless of order.
+async function resolveWikipediaTitle(query, signal){
+  const openSearchUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=1&namespace=0&format=json&origin=*`;
+  const openSearchRes = await fetch(openSearchUrl, { signal });
+  if(openSearchRes.ok){
+    const [, titles] = await openSearchRes.json();
+    if(titles && titles.length) return titles[0];
+  }
+  const fullTextUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=1&format=json&origin=*`;
+  const fullTextRes = await fetch(fullTextUrl, { signal });
+  if(!fullTextRes.ok) throw new Error('Wikipedia search failed: ' + fullTextRes.status);
+  const fullTextData = await fullTextRes.json();
+  const hits = fullTextData.query && fullTextData.query.search;
+  return hits && hits.length ? hits[0].title : null;
+}
+
+async function wikipediaLookup(query, signal){
+  const title = await resolveWikipediaTitle(query, signal);
+  if(!title) return `No Wikipedia article found for "${query}".`;
+  const summaryRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, { signal });
+  if(!summaryRes.ok) throw new Error('Wikipedia summary failed: ' + summaryRes.status);
+  const summary = await summaryRes.json();
+  const pageUrl = `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+  return `${summary.title}\n${pageUrl}\n\n${summary.extract || 'No summary available.'}`;
+}
+
+// Fetches a URL that the browser itself can't reach directly (CORS) through
+// the user's own local proxy. There is deliberately no fallback to a public
+// proxy: if the local one isn't running, this fails loudly with instructions
+// rather than silently routing the user's data through a service they didn't
+// choose.
+async function fetchViaCorsProxy(targetUrl, signal){
+  const proxy = state.settings.corsProxyUrl || DEFAULT_CORS_PROXY;
+  let res;
+  try{
+    res = await fetch(proxy + encodeURIComponent(targetUrl), { signal });
+  }catch(e){
+    if(e.name === 'AbortError') throw e;
+    // The fetch to the proxy itself never completed — it's not running,
+    // wrong port, etc.
+    throw new Error(
+      `Couldn't reach your local CORS proxy at ${proxy} (${e.message}). ` +
+      `Start it with \`python3 local_cors_proxy.py\`, then try again.`
+    );
+  }
+  let text;
+  try{
+    text = await res.text();
+  }catch(e){
+    if(e.name === 'AbortError') throw e;
+    throw new Error(`Local proxy responded but reading its response failed: ${e.message}`);
+  }
+  if(!res.ok){
+    // The proxy responded — it just couldn't satisfy the request (upstream
+    // site rejected it, timed out, TLS error, etc). Surface its actual
+    // response body, which carries the real reason, instead of only the
+    // status code — that detail is what makes this debuggable.
+    throw new Error(`Local proxy couldn't fetch that page (${res.status}): ${text.slice(0, 300)}`);
+  }
+  return text;
+}
+
+// DuckDuckGo wraps result links in its own redirect ("/l/?uddg=...") rather
+// than linking straight to the target — this pulls the real URL back out.
+function resolveDdgUrl(href){
+  try{
+    const url = new URL(href, 'https://duckduckgo.com');
+    const uddg = url.searchParams.get('uddg');
+    return uddg ? decodeURIComponent(uddg) : url.href;
+  }catch(e){
+    return href;
+  }
+}
+
+async function duckduckgoSearch(query, signal){
+  const targetUrl = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query);
+  const html = await fetchViaCorsProxy(targetUrl, signal);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const results = Array.from(doc.querySelectorAll('.result')).slice(0, 5).map(el => {
+    const linkEl = el.querySelector('.result__a');
+    if(!linkEl) return null;
+    const title = linkEl.textContent.trim();
+    const url = resolveDdgUrl(linkEl.getAttribute('href') || '');
+    const snippetEl = el.querySelector('.result__snippet');
+    const snippet = snippetEl ? snippetEl.textContent.trim() : '';
+    return `${title}\n${url}\n${snippet}`;
+  }).filter(Boolean);
+  return results.length ? results.join('\n\n') : 'No results found.';
+}
+
+async function webFetch(url, signal){
+  const html = await fetchViaCorsProxy(url, signal);
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script,style,noscript').forEach(el => el.remove());
+  const text = (doc.body ? doc.body.textContent : html).replace(/\s+/g, ' ').trim();
+  return text.slice(0, 6000);
+}
+
+// Runs one model-requested tool call and returns its result as plain text
+// (or a descriptive error string, so the model can see what went wrong and
+// react instead of the whole turn silently failing).
+async function executeToolCall(call, signal){
+  const name = call.function.name;
+  let args = call.function.arguments;
+  if(typeof args === 'string'){
+    try{ args = JSON.parse(args); }catch(e){ args = {}; }
+  }
+  await enforceToolRateLimit(signal);
+  if(signal && signal.aborted) return 'Cancelled.';
+  try{
+    if(name === 'wikipedia_lookup') return await wikipediaLookup(args.query || '', signal);
+    if(name === 'web_search') return await duckduckgoSearch(args.query || '', signal);
+    if(name === 'web_fetch') return await webFetch(args.url || '', signal);
+    return `Unknown tool: ${name}`;
+  }catch(e){
+    if(e.name === 'AbortError') return 'Cancelled.';
+    return `Error running ${name}: ${e.message}`;
+  }
+}
+
+// Streams one model's reply into chat.messages[index], updating the DOM
+// incrementally as tokens arrive, and on completion records tokens/sec, time
+// to first token, and total latency from Ollama's final "done" payload for
+// renderAssistantMeta to display. Independent per call, so two can run
+// concurrently for side-by-side comparison. toolRound tracks how many
+// tool-call round-trips this turn has made, so a model that keeps chaining
+// tool calls can't loop forever.
+async function streamAssistantResponse(chat, index, model, history, controller, toolRound){
+  toolRound = toolRound || 0;
+  if(chat.messages[index].queued){
+    delete chat.messages[index].queued;
+    updateStreamingBubble(index);
+  }
+  const startTime = performance.now();
+  let firstTokenTime = null;
+  let pendingToolCalls = null;
+  try{
+    const body = {
+      model: model,
+      messages: history,
+      stream: true
+    };
+    const thinkValue = resolveThinkValue();
+    if(thinkValue !== undefined){
+      body.think = thinkValue;
+    }
+    if(state.settings.maxTokens){
+      body.options = { num_predict: state.settings.maxTokens };
+    }
+    if(toolRound < MAX_TOOL_ROUNDS){
+      body.tools = chat.webSearchEnabled ? WIKIPEDIA_TOOLS.concat(WEB_SEARCH_TOOLS) : WIKIPEDIA_TOOLS;
+    }
+    const res = await fetch(state.settings.baseUrl + '/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify(body)
+    });
+
+    if(!res.ok || !res.body){
+      throw new Error('Request failed: ' + res.status);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    // Handles one parsed NDJSON line from Ollama: applies thinking/content
+    // deltas, captures any tool call request, and on the final "done" line,
+    // records timing/throughput stats.
+    const processLine = (line) => {
+      if(!line.trim()) return;
+      const json = JSON.parse(line);
+      const msg = chat.messages[index];
+      let changed = false;
+      if(json.message && json.message.thinking){
+        msg.thinking += json.message.thinking;
+        changed = true;
+      }
+      if(json.message && json.message.content){
+        if(firstTokenTime === null) firstTokenTime = performance.now();
+        msg.content += json.message.content;
+        changed = true;
+      }
+      if(json.message && json.message.tool_calls && json.message.tool_calls.length){
+        pendingToolCalls = json.message.tool_calls;
+      }
+      if(json.done){
+        const evalCount = json.eval_count || 0;
+        const evalDuration = json.eval_duration || 0; // nanoseconds
+        const totalDurationNs = json.total_duration || (performance.now() - startTime) * 1e6;
+        msg.stats = {
+          tps: evalDuration ? evalCount / (evalDuration / 1e9) : null,
+          ttftMs: firstTokenTime !== null ? Math.round(firstTokenTime - startTime) : null,
+          totalMs: Math.round(totalDurationNs / 1e6)
+        };
+        changed = true;
+      }
+      if(changed) updateStreamingBubble(index);
+    };
+
+    while(true){
+      const { value, done } = await reader.read();
+      if(done) break;
+      buffer += decoder.decode(value, { stream:true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for(const line of lines) processLine(line);
+    }
+    // The stream can close without a trailing newline after the last JSON
+    // line (the one carrying done:true and the eval/timing stats) — if so
+    // it's still sitting in `buffer` and would otherwise be silently lost.
+    if(buffer.trim()) processLine(buffer);
+  }catch(err){
+    if(err.name !== 'AbortError'){
+      chat.messages[index].content =
+        `⚠ Couldn't reach Ollama at ${state.settings.baseUrl}.\n\nMake sure \`ollama serve\` is running and reachable, then check Settings. Error: ${err.message}`;
+      updateStreamingBubble(index);
+    } else {
+      const msg = chat.messages[index];
+      // Marks the turn as finished-via-abort so any in-progress "Thinking…"
+      // / typing-dots indicators resolve instead of animating forever, since
+      // nothing further will ever arrive to update this bubble.
+      msg.stopped = true;
+      updateStreamingBubble(index);
+    }
+    return;
+  }
+
+  // If the model asked to use a tool, run it, feed the result back in, and
+  // let the model continue — reusing the same message bubble so the tool
+  // activity log and eventual answer appear as one continuous turn.
+  if(pendingToolCalls && pendingToolCalls.length && toolRound < MAX_TOOL_ROUNDS){
+    const msg = chat.messages[index];
+    msg.toolLog = msg.toolLog || [];
+
+    history.push({ role: 'assistant', content: msg.content || '', tool_calls: pendingToolCalls });
+
+    for(const call of pendingToolCalls){
+      if(controller.signal.aborted) break;
+      let args = call.function.arguments;
+      if(typeof args === 'string'){ try{ args = JSON.parse(args); }catch(e){ args = {}; } }
+      const logEntry = { type: call.function.name, args: args || {}, status: 'running' };
+      msg.toolLog.push(logEntry);
+      updateStreamingBubble(index);
+
+      const result = await executeToolCall(call, controller.signal);
+      if(controller.signal.aborted){
+        logEntry.status = 'aborted';
+        logEntry.result = 'Cancelled.';
+        updateStreamingBubble(index);
+        break;
+      }
+      logEntry.status = 'done';
+      logEntry.result = result;
+      updateStreamingBubble(index);
+
+      history.push({ role: 'tool', content: result, tool_call_id: call.id });
+    }
+
+    if(controller.signal.aborted){
+      msg.stopped = true;
+      updateStreamingBubble(index);
+      return;
+    }
+
+    return streamAssistantResponse(chat, index, model, history, controller, toolRound + 1);
+  }
+}
+
+function setStreaming(on){
+  state.streaming = on;
+  const btn = document.getElementById('sendBtn');
+  btn.textContent = on ? '■' : '↑';
+  btn.classList.toggle('stop-btn', on);
+}
+
+function autoResize(el){
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+}
+
+document.getElementById('input').addEventListener('input', function(){
+  autoResize(this);
+});
+document.getElementById('input').addEventListener('keydown', function(e){
+  if(e.key === 'Enter' && !e.shiftKey){
+    e.preventDefault();
+    handleSendClick();
+  }
+});
+
+// Tracks whether the user is parked at (or near) the bottom of the
+// conversation. Scrolling up during a generation drops autoScroll to false
+// so new tokens stop pulling the view down; scrolling back down (or the
+// "New output" button) turns it back on.
+document.getElementById('messages').addEventListener('scroll', function(){
+  const distanceFromBottom = this.scrollHeight - this.scrollTop - this.clientHeight;
+  state.autoScroll = distanceFromBottom < 60;
+  updateScrollBottomBtn();
+});
+
+// --- Init ---
+load();
+if(state.chats.length){
+  state.currentId = state.chats[0].id;
+}
+renderChatList();
+renderMessages();
+renderModelSelect();
+checkConnection();
+setInterval(checkConnection, 15000);
+setInterval(checkProxyStatus, 15000);
+
+// Try to silently pick back up a previously connected local save file. If
+// the file has newer/different content than what's cached in localStorage
+// (e.g. edited on another device since this browser last synced), adopt it
+// and re-render.
+tryRestoreLocalSaveFile();
+</script>
+</body>
+</html>

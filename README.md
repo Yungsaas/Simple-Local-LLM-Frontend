@@ -55,6 +55,8 @@ Same idea: this closes the running Ollama app first, then restarts it with the s
 4. Variable name: `OLLAMA_ORIGINS`, Variable value: `*`
 5. Click OK on all dialogs.
 6. Quit Ollama completely (right-click its icon in the system tray → Quit) and reopen it. It will now always start with this setting, including after a reboot.
+
+   
 **Mac:**
 Run this once in Terminal:
 ```bash
@@ -176,6 +178,8 @@ OLLAMA_ORIGINS=* ollama serve
 4. Имя переменной: `OLLAMA_ORIGINS`, значение переменной: `*`
 5. Нажмите OK во всех диалоговых окнах.
 6. Полностью закройте Ollama (правый клик по значку в системном трее → «Выход») и откройте её заново. Теперь она всегда будет запускаться с этой настройкой, в том числе после перезагрузки.
+
+   
 **Mac:**
 Выполните это один раз в терминале:
 ```bash

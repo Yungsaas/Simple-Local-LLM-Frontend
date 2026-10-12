@@ -6,10 +6,14 @@ const SETTINGS_KEY = 'ollama_chat_settings_v1';
 // and reused everywhere the default is needed.
 const DEFAULT_CORS_PROXY = 'http://127.0.0.1:8765/?url=';
 
+// Default address of mcp_bridge.py, the local script that runs MCP servers
+// (like Roblox Studio's built-in one) on behalf of the page.
+const DEFAULT_MCP_BRIDGE = 'http://127.0.0.1:8766';
+
 let state = {
   chats: [],        // {id, title, model, messages:[{role,content}], createdAt, compare, compareModel}
   currentId: null,
-  settings: { baseUrl: 'http://localhost:11434', models: ['gemma4:e4b'], activeModel: 'gemma4:e4b', theme: 'light', thinkLevel: 'default', maxTokens: null, useLocalFile: false, promptPresets: [], corsProxyUrl: DEFAULT_CORS_PROXY },
+  settings: { baseUrl: 'http://localhost:11434', models: ['gemma4:e4b'], activeModel: 'gemma4:e4b', theme: 'light', thinkLevel: 'default', maxTokens: null, useLocalFile: false, promptPresets: [], corsProxyUrl: DEFAULT_CORS_PROXY, mcpBridgeUrl: DEFAULT_MCP_BRIDGE, mcpConfirmCalls: true, mcpBridgeToken: '' },
   streaming: false,
   abortControllers: [],
   addingModel: false,
@@ -20,7 +24,7 @@ let state = {
   // i.e. before any chat exists yet. Applied to the chat the moment it's
   // actually created (see sendMessage), then reset by resetDraft() the
   // next time the user lands back on Home. See resetDraft() below.
-  draft: { promptPresetId: null, webSearchEnabled: false, compare: false, compareModel: null, compareMode: 'simultaneous' },
+  draft: { promptPresetId: null, webSearchEnabled: false, mcpEnabled: false, compare: false, compareModel: null, compareMode: 'simultaneous' },
 };
 
 function load(){
@@ -85,6 +89,16 @@ function load(){
   if(!state.settings.corsProxyUrl || RETIRED_PUBLIC_PROXY_DEFAULTS.includes(state.settings.corsProxyUrl)){
     state.settings.corsProxyUrl = DEFAULT_CORS_PROXY;
   }
+  // MCP bridge settings (added later, so older saved settings lack them).
+  if(!state.settings.mcpBridgeUrl){
+    state.settings.mcpBridgeUrl = DEFAULT_MCP_BRIDGE;
+  }
+  if(typeof state.settings.mcpBridgeToken !== 'string'){
+    state.settings.mcpBridgeToken = '';
+  }
+  if(state.settings.mcpConfirmCalls === undefined){
+    state.settings.mcpConfirmCalls = true;
+  }
   applyTheme();
 }
 
@@ -131,7 +145,8 @@ function makeNewChat(){
     compareModel: null,
     compareMode: 'simultaneous',
     promptPresetId: null,
-    webSearchEnabled: false
+    webSearchEnabled: false,
+    mcpEnabled: false
   };
 }
 
@@ -143,6 +158,7 @@ function resetDraft(){
   state.draft = {
     promptPresetId: null,
     webSearchEnabled: false,
+    mcpEnabled: false,
     compare: false,
     compareModel: null,
     compareMode: 'simultaneous'

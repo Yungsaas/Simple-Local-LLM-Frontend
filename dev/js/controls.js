@@ -25,6 +25,7 @@ function renderModelSelect(){
   renderCompareUI();
   renderPromptSelect();
   renderWebSearchUI();
+  renderMcpUI();
 }
 
 // --- Instruction preset dropdown (topbar) ---
@@ -201,6 +202,99 @@ async function checkProxyStatus(){
   }finally{
     btn.classList.remove('proxy-checking');
   }
+}
+
+// --- MCP tools toggle (per-chat, same Home-screen/draft pattern) ---
+// The tools come from the MCP servers in mcp_servers.json, run through
+// mcp_bridge.py (see mcp.js).
+function renderMcpUI(){
+  const btn = document.getElementById('mcpToggleBtn');
+  if(!btn) return;
+  const chat = getCurrentChat();
+  const enabled = chat ? !!chat.mcpEnabled : !!state.draft.mcpEnabled;
+  btn.classList.toggle('active', enabled);
+  checkMcpStatus();
+}
+
+function toggleMcp(){
+  const chat = getCurrentChat();
+  if(chat){
+    chat.mcpEnabled = !chat.mcpEnabled;
+    persistChats();
+  } else {
+    state.draft.mcpEnabled = !state.draft.mcpEnabled;
+  }
+  renderMcpUI();
+}
+
+// 'ok' | 'bridge-down' | 'bad-token' | 'no-tools' | null. The toast only
+// fires on a transition into a failure state, like checkProxyStatus, so a
+// bridge that stays down doesn't re-toast every 15 seconds.
+let lastKnownMcpState = null;
+
+async function checkMcpStatus(){
+  const btn = document.getElementById('mcpToggleBtn');
+  if(!btn) return;
+  const chat = getCurrentChat();
+  const enabled = chat ? !!chat.mcpEnabled : !!state.draft.mcpEnabled;
+  const defaultTitle = 'Let the model use tools from the MCP servers in mcp_servers.json, e.g. Roblox Studio (needs mcp_bridge.py running)';
+  if(!enabled){
+    btn.classList.remove('proxy-error');
+    btn.title = defaultTitle;
+    lastKnownMcpState = null;
+    return;
+  }
+  const base = mcpBase();
+  btn.classList.add('proxy-checking');
+  let next, detail = '';
+  try{
+    // Loading the tool list also starts the MCP servers on first use, so this
+    // reports the real situation, not just "the bridge answers".
+    await refreshMcpTools(true);
+    if(mcpState.tools.length){
+      next = 'ok';
+      const names = Array.from(new Set(mcpState.servers.filter(s => s.toolCount > 0).map(s => s.name)));
+      detail = `${mcpState.tools.length} tools from ${names.join(', ')}`;
+    } else {
+      next = 'no-tools';
+      detail = mcpState.servers.map(s => s.error ? `${s.name}: ${s.error}` : `${s.name}: ${s.state}`).join('\n');
+    }
+  }catch(e){
+    next = e.kind === 'bridge-down' ? 'bridge-down' : (e.kind === 'bad-token' ? 'bad-token' : 'no-tools');
+    detail = e.message;
+  }
+  btn.classList.remove('proxy-checking');
+  btn.classList.toggle('proxy-error', next !== 'ok');
+
+  if(next === 'ok'){
+    btn.title = `MCP is connected: ${detail}.`;
+  } else if(next === 'bridge-down'){
+    btn.title = `The MCP bridge isn't reachable at ${base}.\nStart it with: python3 mcp_bridge.py`;
+  } else if(next === 'bad-token'){
+    btn.title = 'The MCP bridge rejected the token. Paste the token mcp_bridge.py prints at startup into Settings.';
+  } else {
+    btn.title = `The bridge is running but no tools are available.\n${detail}`;
+  }
+
+  if(next !== 'ok' && lastKnownMcpState !== next){
+    const toasts = {
+      'bridge-down': {
+        title: "Can't reach the MCP bridge",
+        body: `Nothing is answering at ${base}. Double-click start-mcp-bridge-windows.bat, or run "python3 mcp_bridge.py" from a terminal.`
+      },
+      'bad-token': {
+        title: 'MCP bridge token needed',
+        body: 'Copy the token printed in the mcp_bridge.py window (also saved in mcp_bridge_token.txt) into Settings → MCP bridge.'
+      },
+      'no-tools': {
+        title: 'No MCP tools available',
+        body: (detail || 'The MCP servers reported no tools.') +
+          '\nFor Roblox Studio: open Studio and turn on "Enable Studio as MCP server" under Manage MCP Servers.'
+      }
+    };
+    showToast(Object.assign({ type: 'error' }, toasts[next]));
+  }
+  lastKnownMcpState = next;
 }
 
 function onModelSelect2Change(value){

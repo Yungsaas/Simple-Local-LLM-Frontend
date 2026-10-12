@@ -521,6 +521,7 @@
       <div class="topbar-right">
         <select class="model-select" id="promptSelect" onchange="onPromptSelectChange(this.value)" title="Instructions for this chat"></select>
         <button class="compare-toggle-btn" id="webSearchToggleBtn" onclick="toggleWebSearch()" title="Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)">Web search</button>
+        <button class="compare-toggle-btn" id="mcpToggleBtn" onclick="toggleMcp()" title="Let the model use tools from the MCP servers in mcp_servers.json, e.g. Roblox Studio (needs mcp_bridge.py running)">MCP tools</button>
         <button class="compare-toggle-btn" id="compareToggleBtn" onclick="toggleCompareMode()" title="Send each message to two models side-by-side">⇄ Compare</button>
         <select class="model-select" id="compareModeSelect" style="display:none;" onchange="onCompareModeChange(this.value)" title="Run both models at once, or one after the other">
           <option value="simultaneous">Together</option>
@@ -598,6 +599,14 @@
       <input type="text" id="corsProxyInput" placeholder="http://127.0.0.1:8765/?url=">
     </div>
     <div class="field">
+      <label>MCP bridge <span class="field-hint">(mcp_bridge.py, the local script that runs your MCP servers, e.g. Roblox Studio; servers are listed in mcp_servers.json)</span></label>
+      <input type="text" id="mcpBridgeInput" placeholder="http://127.0.0.1:8766">
+      <input type="password" id="mcpTokenInput" placeholder="Bridge token (printed when mcp_bridge.py starts)" autocomplete="off" style="margin-top:8px;">
+      <label style="display:flex; align-items:center; gap:8px; margin:8px 0 0 0;">
+        <input type="checkbox" id="mcpConfirmInput" style="width:auto;"> Ask me before tools that may change things
+      </label>
+    </div>
+    <div class="field">
       <label>Chat storage</label>
       <div id="storageSettings"></div>
       <input type="file" id="importFileInput" accept="application/json" style="display:none;" onchange="handleImportFile(event)">
@@ -622,10 +631,14 @@ const SETTINGS_KEY = 'ollama_chat_settings_v1';
 // and reused everywhere the default is needed.
 const DEFAULT_CORS_PROXY = 'http://127.0.0.1:8765/?url=';
 
+// Default address of mcp_bridge.py, the local script that runs MCP servers
+// (like Roblox Studio's built-in one) on behalf of the page.
+const DEFAULT_MCP_BRIDGE = 'http://127.0.0.1:8766';
+
 let state = {
   chats: [],        // {id, title, model, messages:[{role,content}], createdAt, compare, compareModel}
   currentId: null,
-  settings: { baseUrl: 'http://localhost:11434', models: ['gemma4:e4b'], activeModel: 'gemma4:e4b', theme: 'light', thinkLevel: 'default', maxTokens: null, useLocalFile: false, promptPresets: [], corsProxyUrl: DEFAULT_CORS_PROXY },
+  settings: { baseUrl: 'http://localhost:11434', models: ['gemma4:e4b'], activeModel: 'gemma4:e4b', theme: 'light', thinkLevel: 'default', maxTokens: null, useLocalFile: false, promptPresets: [], corsProxyUrl: DEFAULT_CORS_PROXY, mcpBridgeUrl: DEFAULT_MCP_BRIDGE, mcpConfirmCalls: true, mcpBridgeToken: '' },
   streaming: false,
   abortControllers: [],
   addingModel: false,
@@ -636,7 +649,7 @@ let state = {
   // i.e. before any chat exists yet. Applied to the chat the moment it's
   // actually created (see sendMessage), then reset by resetDraft() the
   // next time the user lands back on Home. See resetDraft() below.
-  draft: { promptPresetId: null, webSearchEnabled: false, compare: false, compareModel: null, compareMode: 'simultaneous' },
+  draft: { promptPresetId: null, webSearchEnabled: false, mcpEnabled: false, compare: false, compareModel: null, compareMode: 'simultaneous' },
 };
 
 function load(){
@@ -701,6 +714,16 @@ function load(){
   if(!state.settings.corsProxyUrl || RETIRED_PUBLIC_PROXY_DEFAULTS.includes(state.settings.corsProxyUrl)){
     state.settings.corsProxyUrl = DEFAULT_CORS_PROXY;
   }
+  // MCP bridge settings (added later, so older saved settings lack them).
+  if(!state.settings.mcpBridgeUrl){
+    state.settings.mcpBridgeUrl = DEFAULT_MCP_BRIDGE;
+  }
+  if(typeof state.settings.mcpBridgeToken !== 'string'){
+    state.settings.mcpBridgeToken = '';
+  }
+  if(state.settings.mcpConfirmCalls === undefined){
+    state.settings.mcpConfirmCalls = true;
+  }
   applyTheme();
 }
 
@@ -747,7 +770,8 @@ function makeNewChat(){
     compareModel: null,
     compareMode: 'simultaneous',
     promptPresetId: null,
-    webSearchEnabled: false
+    webSearchEnabled: false,
+    mcpEnabled: false
   };
 }
 
@@ -759,6 +783,7 @@ function resetDraft(){
   state.draft = {
     promptPresetId: null,
     webSearchEnabled: false,
+    mcpEnabled: false,
     compare: false,
     compareModel: null,
     compareMode: 'simultaneous'
@@ -1089,7 +1114,11 @@ function resolveSystemPrompt(chat){
 // requests from cross-contaminating via tool-call round-trips, which append to
 // the array they're handed.
 function buildHistoryForModel(chat, model){
-  const systemPrompt = resolveSystemPrompt(chat);
+  let systemPrompt = resolveSystemPrompt(chat);
+  // When MCP tools are on, add usage guidance for them.
+  if(chat.mcpEnabled){
+    systemPrompt = (systemPrompt ? systemPrompt + '\n\n' : '') + MCP_SYSTEM_NOTE;
+  }
   const history = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
   chat.messages.forEach(m => {
     if(m.role === 'assistant' && m.groupId && m.model !== model) return;
@@ -1271,6 +1300,7 @@ function renderToolLog(toolLog){
     if(t.type === 'wikipedia_lookup') return `Wikipedia: "${escapeHtml(t.args.query || '')}"`;
     if(t.type === 'web_search') return `Searching: "${escapeHtml(t.args.query || '')}"`;
     if(t.type === 'web_fetch') return `Fetching: ${escapeHtml(t.args.url || '')}`;
+    if(t.type.includes('__')) return `MCP: ${escapeHtml(t.type.replace('__', ' → '))}`;
     return escapeHtml(t.type);
   };
   const summary = stillRunning
@@ -1522,6 +1552,7 @@ function renderModelSelect(){
   renderCompareUI();
   renderPromptSelect();
   renderWebSearchUI();
+  renderMcpUI();
 }
 
 // --- Instruction preset dropdown (topbar) ---
@@ -1700,6 +1731,99 @@ async function checkProxyStatus(){
   }
 }
 
+// --- MCP tools toggle (per-chat, same Home-screen/draft pattern) ---
+// The tools come from the MCP servers in mcp_servers.json, run through
+// mcp_bridge.py (see mcp.js).
+function renderMcpUI(){
+  const btn = document.getElementById('mcpToggleBtn');
+  if(!btn) return;
+  const chat = getCurrentChat();
+  const enabled = chat ? !!chat.mcpEnabled : !!state.draft.mcpEnabled;
+  btn.classList.toggle('active', enabled);
+  checkMcpStatus();
+}
+
+function toggleMcp(){
+  const chat = getCurrentChat();
+  if(chat){
+    chat.mcpEnabled = !chat.mcpEnabled;
+    persistChats();
+  } else {
+    state.draft.mcpEnabled = !state.draft.mcpEnabled;
+  }
+  renderMcpUI();
+}
+
+// 'ok' | 'bridge-down' | 'bad-token' | 'no-tools' | null. The toast only
+// fires on a transition into a failure state, like checkProxyStatus, so a
+// bridge that stays down doesn't re-toast every 15 seconds.
+let lastKnownMcpState = null;
+
+async function checkMcpStatus(){
+  const btn = document.getElementById('mcpToggleBtn');
+  if(!btn) return;
+  const chat = getCurrentChat();
+  const enabled = chat ? !!chat.mcpEnabled : !!state.draft.mcpEnabled;
+  const defaultTitle = 'Let the model use tools from the MCP servers in mcp_servers.json, e.g. Roblox Studio (needs mcp_bridge.py running)';
+  if(!enabled){
+    btn.classList.remove('proxy-error');
+    btn.title = defaultTitle;
+    lastKnownMcpState = null;
+    return;
+  }
+  const base = mcpBase();
+  btn.classList.add('proxy-checking');
+  let next, detail = '';
+  try{
+    // Loading the tool list also starts the MCP servers on first use, so this
+    // reports the real situation, not just "the bridge answers".
+    await refreshMcpTools(true);
+    if(mcpState.tools.length){
+      next = 'ok';
+      const names = Array.from(new Set(mcpState.servers.filter(s => s.toolCount > 0).map(s => s.name)));
+      detail = `${mcpState.tools.length} tools from ${names.join(', ')}`;
+    } else {
+      next = 'no-tools';
+      detail = mcpState.servers.map(s => s.error ? `${s.name}: ${s.error}` : `${s.name}: ${s.state}`).join('\n');
+    }
+  }catch(e){
+    next = e.kind === 'bridge-down' ? 'bridge-down' : (e.kind === 'bad-token' ? 'bad-token' : 'no-tools');
+    detail = e.message;
+  }
+  btn.classList.remove('proxy-checking');
+  btn.classList.toggle('proxy-error', next !== 'ok');
+
+  if(next === 'ok'){
+    btn.title = `MCP is connected: ${detail}.`;
+  } else if(next === 'bridge-down'){
+    btn.title = `The MCP bridge isn't reachable at ${base}.\nStart it with: python3 mcp_bridge.py`;
+  } else if(next === 'bad-token'){
+    btn.title = 'The MCP bridge rejected the token. Paste the token mcp_bridge.py prints at startup into Settings.';
+  } else {
+    btn.title = `The bridge is running but no tools are available.\n${detail}`;
+  }
+
+  if(next !== 'ok' && lastKnownMcpState !== next){
+    const toasts = {
+      'bridge-down': {
+        title: "Can't reach the MCP bridge",
+        body: `Nothing is answering at ${base}. Double-click start-mcp-bridge-windows.bat, or run "python3 mcp_bridge.py" from a terminal.`
+      },
+      'bad-token': {
+        title: 'MCP bridge token needed',
+        body: 'Copy the token printed in the mcp_bridge.py window (also saved in mcp_bridge_token.txt) into Settings → MCP bridge.'
+      },
+      'no-tools': {
+        title: 'No MCP tools available',
+        body: (detail || 'The MCP servers reported no tools.') +
+          '\nFor Roblox Studio: open Studio and turn on "Enable Studio as MCP server" under Manage MCP Servers.'
+      }
+    };
+    showToast(Object.assign({ type: 'error' }, toasts[next]));
+  }
+  lastKnownMcpState = next;
+}
+
 function onModelSelect2Change(value){
   const chat = getCurrentChat();
   if(chat){
@@ -1745,6 +1869,9 @@ function openSettings(){
   document.getElementById('thinkLevelInput').value = state.settings.thinkLevel || 'default';
   document.getElementById('maxTokensInput').value = state.settings.maxTokens || '';
   document.getElementById('corsProxyInput').value = state.settings.corsProxyUrl || '';
+  document.getElementById('mcpBridgeInput').value = state.settings.mcpBridgeUrl || DEFAULT_MCP_BRIDGE;
+  document.getElementById('mcpTokenInput').value = state.settings.mcpBridgeToken || '';
+  document.getElementById('mcpConfirmInput').checked = state.settings.mcpConfirmCalls !== false;
   showSettingsMessage('');
   state.addingModel = false;
   state.addingPreset = false;
@@ -1839,6 +1966,9 @@ function saveSettings(){
   state.settings.thinkLevel = document.getElementById('thinkLevelInput').value;
   state.settings.maxTokens = maxTokens;
   state.settings.corsProxyUrl = document.getElementById('corsProxyInput').value.trim() || DEFAULT_CORS_PROXY;
+  state.settings.mcpBridgeUrl = document.getElementById('mcpBridgeInput').value.trim().replace(/\/$/,'') || DEFAULT_MCP_BRIDGE;
+  state.settings.mcpBridgeToken = document.getElementById('mcpTokenInput').value.trim();
+  state.settings.mcpConfirmCalls = document.getElementById('mcpConfirmInput').checked;
   persistSettings();
   settingsSnapshotOnOpen = null;
   closeSettings();
@@ -2058,6 +2188,168 @@ function deletePreset(id, ev){
 }
 </script>
 <script>
+// =====================================================================
+// MCP tools (e.g. Roblox Studio's built-in MCP server)
+//
+// mcp_bridge.py (localhost) launches the MCP servers from mcp_servers.json.
+// This file asks it which tools exist, offers them to the model in Ollama's
+// tool format, and sends the model's calls back through it. Nothing about a
+// specific server is hardcoded: tool names, descriptions and parameters all
+// come from the servers themselves. Only offered when the chat's "MCP tools"
+// toggle is on.
+// =====================================================================
+
+const MCP_CACHE_MS = 30000;
+const MCP_MAX_RESULT_CHARS = 12000;
+
+const MCP_SYSTEM_NOTE =
+  'You have tools provided by connected MCP servers (their names look like Server__tool_name). ' +
+  'Use them when the user\'s request involves what they control. Look before you change anything: ' +
+  'use the read/inspect tools first and never guess names, paths or IDs. Make small, targeted changes. ' +
+  'Calls that may change something can need the user\'s approval; if the user declines one, do not retry it, ask what they want instead. ' +
+  'You only get a limited number of tool rounds per message, so when several calls are independent, request them together in one step instead of one at a time. ' +
+  'Briefly tell the user what you did when you finish.';
+
+// Filled by refreshMcpTools(). `tools` is what gets sent to Ollama; `index`
+// maps the name the model sees to { server, tool, readOnly }.
+const mcpState = {
+  tools: [],
+  index: new Map(),
+  bare: new Map(),     // bare tool name -> entries (fallback if the model drops the "Server__" prefix)
+  servers: [],         // [{name, state, error, toolCount}] as last reported by the bridge
+  fetchedAt: 0
+};
+
+function mcpBase(){
+  return (state.settings.mcpBridgeUrl || DEFAULT_MCP_BRIDGE).replace(/\/$/, '');
+}
+
+function mcpHeaders(extra){
+  return Object.assign({ 'X-Bridge-Token': state.settings.mcpBridgeToken || '' }, extra || {});
+}
+
+// Errors thrown here carry a `kind` the UI uses to say what's wrong:
+// 'bridge-down' (nothing answering), 'bad-token', or 'other'.
+function mcpError(kind, message){
+  const e = new Error(message);
+  e.kind = kind;
+  return e;
+}
+
+async function mcpFetch(path, options){
+  let res;
+  try{
+    res = await fetch(mcpBase() + path, options);
+  }catch(e){
+    if(e.name === 'AbortError') throw e;
+    throw mcpError('bridge-down', `Couldn't reach the MCP bridge at ${mcpBase()} (${e.message}). Start it with \`python3 mcp_bridge.py\`.`);
+  }
+  let data = null;
+  try{ data = await res.json(); }catch(e){}
+  if(res.status === 401){
+    throw mcpError('bad-token', (data && data.error) || 'The MCP bridge rejected the token. Check Settings.');
+  }
+  if(!res.ok || !data || data.ok === false){
+    throw mcpError('other', (data && data.error) || `MCP bridge error ${res.status}`);
+  }
+  return data;
+}
+
+// Turns "Server" + "tool" into a name safe to hand to a model.
+function mcpExposedName(server, tool, taken){
+  let base = `${server}__${tool}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
+  let name = base, n = 2;
+  while(taken.has(name)){
+    const suffix = '_' + n++;
+    name = base.slice(0, 64 - suffix.length) + suffix;
+  }
+  return name;
+}
+
+// Asks the bridge for the current tool list (starting the MCP servers if
+// needed) and rebuilds mcpState. Throws the errors from mcpFetch.
+async function refreshMcpTools(force){
+  if(!force && mcpState.tools.length && Date.now() - mcpState.fetchedAt < MCP_CACHE_MS) return mcpState;
+  const data = await mcpFetch('/tools', { headers: mcpHeaders() });
+  const tools = [], index = new Map(), bare = new Map();
+  (data.tools || []).forEach(t => {
+    if(!t || !t.name) return;
+    const name = mcpExposedName(t.server, t.name, index);
+    const schema = Object.assign({ type: 'object', properties: {} }, t.inputSchema || {});
+    if(schema.type !== 'object') schema.type = 'object';
+    if(!schema.properties) schema.properties = {};
+    const desc = ((t.description || t.title || t.name) + '').trim();
+    tools.push({
+      type: 'function',
+      function: { name, description: `${desc} [via ${t.server}]`, parameters: schema }
+    });
+    const entry = { server: t.server, tool: t.name, readOnly: !!(t.annotations && t.annotations.readOnlyHint === true) };
+    index.set(name, entry);
+    if(!bare.has(t.name)) bare.set(t.name, []);
+    bare.get(t.name).push(entry);
+  });
+  mcpState.tools = tools;
+  mcpState.index = index;
+  mcpState.bare = bare;
+  mcpState.servers = data.servers || [];
+  mcpState.fetchedAt = Date.now();
+  return mcpState;
+}
+
+// Finds the tool a model-supplied name refers to: exact match, or (if the
+// model dropped the "Server__" prefix) a bare name that is unambiguous.
+function resolveMcpTool(name){
+  if(mcpState.index.has(name)) return mcpState.index.get(name);
+  const matches = mcpState.bare.get(name);
+  return matches && matches.length === 1 ? matches[0] : null;
+}
+
+function isMcpTool(name){
+  return !!resolveMcpTool(name);
+}
+
+function describeMcpCall(entry, args){
+  let shown;
+  try{ shown = JSON.stringify(args || {}, null, 2); }catch(e){ shown = String(args); }
+  if(shown.length > 800) shown = shown.slice(0, 800) + '\n…';
+  return `Server: ${entry.server}\nTool: ${entry.tool}\n\nArguments:\n${shown}`;
+}
+
+// Runs one model-requested MCP tool call and returns plain text. Tools the
+// server marks read-only run straight away; anything else asks first (unless
+// the user turned that off in Settings), since the model's calls can change
+// real projects.
+async function runMcpTool(name, args, signal){
+  let entry = resolveMcpTool(name);
+  if(!entry){
+    await refreshMcpTools(true);
+    entry = resolveMcpTool(name);
+  }
+  if(!entry) return `Unknown tool: ${name}. It isn't offered by any connected MCP server.`;
+
+  if(!entry.readOnly && state.settings.mcpConfirmCalls !== false){
+    const approved = window.confirm(
+      `The model wants to run an MCP tool that may change things:\n\n${describeMcpCall(entry, args)}\n\nAllow this call?`
+    );
+    if(!approved){
+      return 'The user declined this call. Do not retry it; ask the user what they would like instead.';
+    }
+  }
+
+  const data = await mcpFetch('/call', {
+    method: 'POST',
+    headers: mcpHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ server: entry.server, tool: entry.tool, arguments: args || {} }),
+    signal
+  });
+  let text = String(data.text || '');
+  if(text.length > MCP_MAX_RESULT_CHARS){
+    text = text.slice(0, MCP_MAX_RESULT_CHARS) + `\n…[truncated, ${text.length - MCP_MAX_RESULT_CHARS} more characters]`;
+  }
+  return data.isError ? 'The tool reported an error:\n' + text : text;
+}
+</script>
+<script>
 // --- Connection check ---
 async function checkConnection(){
   const dot = document.getElementById('connDot');
@@ -2107,6 +2399,7 @@ async function sendMessage(){
     chat = makeNewChat();
     chat.promptPresetId = state.draft.promptPresetId;
     chat.webSearchEnabled = state.draft.webSearchEnabled;
+    chat.mcpEnabled = state.draft.mcpEnabled;
     chat.compare = state.draft.compare;
     chat.compareModel = state.draft.compareModel;
     chat.compareMode = state.draft.compareMode;
@@ -2203,13 +2496,27 @@ function resolveThinkValue(){
 // lookups and is always offered to the model. web_search/web_fetch use a
 // DuckDuckGo lookup routed through a proxy the user runs locally
 // (local_cors_proxy.py, never a public one), so they're gated behind the
-// per-chat "Web search" toggle. Everything else still only talks to the
-// user's local Ollama server.
+// per-chat "Web search" toggle. MCP tools (see mcp.js) are gated behind the
+// per-chat "MCP tools" toggle. Everything else still
+// only talks to the user's local Ollama server.
 // =====================================================================
 
-const MAX_TOOL_ROUNDS = 5;
-const TOOL_MIN_INTERVAL_MS = 1000; // minimum gap between tool calls, human-paced rather than bot-paced
-let lastToolCallTime = 0;
+// Tools fall into two groups with separate limits and cooldowns:
+//   local    -- MCP tools, which only talk to this machine (bridge + local apps)
+//   external -- wikipedia_lookup, web_search, web_fetch, which hit third-party sites
+// A "round" is one model reply that requested tools, followed by the results
+// being fed back. A round counts against every group it used, per message.
+const MAX_LOCAL_TOOL_ROUNDS = 15;
+const MAX_EXTERNAL_TOOL_ROUNDS = 5;
+// Minimum gap between tool calls in each group. External stays human-paced
+// rather than bot-paced; local is basically instant so it only needs a tiny gap.
+const LOCAL_TOOL_MIN_INTERVAL_MS = 50;
+const EXTERNAL_TOOL_MIN_INTERVAL_MS = 1000;
+const lastToolCallTime = { local: 0, external: 0 };
+
+function isLocalTool(name){
+  return isMcpTool(name);
+}
 
 // Always available, no proxy required.
 const WIKIPEDIA_TOOLS = [
@@ -2260,8 +2567,9 @@ const WEB_SEARCH_TOOLS = [
 // tool making a handful of on-demand requests at human-typing pace, not a
 // bulk scraper, and this keeps it that way regardless of how eagerly a
 // model chains tool calls.
-async function enforceToolRateLimit(signal){
-  const wait = lastToolCallTime + TOOL_MIN_INTERVAL_MS - Date.now();
+async function enforceToolRateLimit(signal, group){
+  const interval = group === 'local' ? LOCAL_TOOL_MIN_INTERVAL_MS : EXTERNAL_TOOL_MIN_INTERVAL_MS;
+  const wait = lastToolCallTime[group] + interval - Date.now();
   if(wait > 0){
     await new Promise(resolve => {
       const t = setTimeout(resolve, wait);
@@ -2270,7 +2578,7 @@ async function enforceToolRateLimit(signal){
       }
     });
   }
-  lastToolCallTime = Date.now();
+  lastToolCallTime[group] = Date.now();
 }
 
 // Resolves a natural-language query to the best-matching Wikipedia article
@@ -2377,16 +2685,22 @@ async function webFetch(url, signal){
 
 // Runs one model-requested tool call and returns its result as plain text
 // (or a descriptive error string, so the model can see what went wrong and
-// react instead of the whole turn silently failing).
-async function executeToolCall(call, signal){
+// react instead of the whole turn silently failing). `chat` is needed so
+// per-chat toggles (like MCP access) are enforced here too, not
+// just by which tools were offered to the model.
+async function executeToolCall(call, signal, chat){
   const name = call.function.name;
   let args = call.function.arguments;
   if(typeof args === 'string'){
     try{ args = JSON.parse(args); }catch(e){ args = {}; }
   }
-  await enforceToolRateLimit(signal);
+  await enforceToolRateLimit(signal, isLocalTool(name) ? 'local' : 'external');
   if(signal && signal.aborted) return 'Cancelled.';
   try{
+    if(isMcpTool(name)){
+      if(!chat || !chat.mcpEnabled) return 'MCP tools are turned off for this chat.';
+      return await runMcpTool(name, args || {}, signal);
+    }
     if(name === 'wikipedia_lookup') return await wikipediaLookup(args.query || '', signal);
     if(name === 'web_search') return await duckduckgoSearch(args.query || '', signal);
     if(name === 'web_fetch') return await webFetch(args.url || '', signal);
@@ -2401,11 +2715,12 @@ async function executeToolCall(call, signal){
 // incrementally as tokens arrive, and on completion records tokens/sec, time
 // to first token, and total latency from Ollama's final "done" payload for
 // renderAssistantMeta to display. Independent per call, so two can run
-// concurrently for side-by-side comparison. toolRound tracks how many
-// tool-call round-trips this turn has made, so a model that keeps chaining
-// tool calls can't loop forever.
-async function streamAssistantResponse(chat, index, model, history, controller, toolRound){
-  toolRound = toolRound || 0;
+// concurrently for side-by-side comparison. `rounds` tracks how many
+// tool-call round-trips this turn has made per group (local / external), so a
+// model that keeps chaining tool calls can't loop forever. `refused` counts
+// rounds where every requested call was turned down for being over budget.
+async function streamAssistantResponse(chat, index, model, history, controller, rounds){
+  rounds = rounds || { local: 0, external: 0, refused: 0 };
   if(chat.messages[index].queued){
     delete chat.messages[index].queued;
     updateStreamingBubble(index);
@@ -2426,9 +2741,23 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
     if(state.settings.maxTokens){
       body.options = { num_predict: state.settings.maxTokens };
     }
-    if(toolRound < MAX_TOOL_ROUNDS){
-      body.tools = chat.webSearchEnabled ? WIKIPEDIA_TOOLS.concat(WEB_SEARCH_TOOLS) : WIKIPEDIA_TOOLS;
+    // Each group is only offered while it still has rounds left this turn.
+    let tools = [];
+    if(rounds.external < MAX_EXTERNAL_TOOL_ROUNDS){
+      tools = tools.concat(WIKIPEDIA_TOOLS);
+      if(chat.webSearchEnabled) tools = tools.concat(WEB_SEARCH_TOOLS);
     }
+    if(chat.mcpEnabled && rounds.local < MAX_LOCAL_TOOL_ROUNDS){
+      // If the bridge is down or the token is wrong, the model simply isn't
+      // offered these tools; the toggle button turns red and says why.
+      try{
+        await refreshMcpTools(false);
+        tools = tools.concat(mcpState.tools);
+      }catch(e){
+        if(e.name === 'AbortError') throw e;
+      }
+    }
+    if(tools.length) body.tools = tools;
     const res = await fetch(state.settings.baseUrl + '/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2509,11 +2838,13 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
   // If the model asked to use a tool, run it, feed the result back in, and
   // let the model continue, reusing the same message bubble so the tool
   // activity log and eventual answer appear as one continuous turn.
-  if(pendingToolCalls && pendingToolCalls.length && toolRound < MAX_TOOL_ROUNDS){
+  if(pendingToolCalls && pendingToolCalls.length && rounds.refused < 2){
     const msg = chat.messages[index];
     msg.toolLog = msg.toolLog || [];
 
     history.push({ role: 'assistant', content: msg.content || '', tool_calls: pendingToolCalls });
+
+    let usedLocal = false, usedExternal = false;
 
     for(const call of pendingToolCalls){
       if(controller.signal.aborted) break;
@@ -2523,7 +2854,19 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
       msg.toolLog.push(logEntry);
       updateStreamingBubble(index);
 
-      const result = await executeToolCall(call, controller.signal);
+      // Over-budget calls (a model can ask for a tool it wasn't offered) are
+      // answered with a refusal instead of being run.
+      const local = isLocalTool(call.function.name);
+      const overBudget = local
+        ? rounds.local >= MAX_LOCAL_TOOL_ROUNDS
+        : rounds.external >= MAX_EXTERNAL_TOOL_ROUNDS;
+      let result;
+      if(overBudget){
+        result = 'Tool limit reached for this message. Do not call this kind of tool again; answer with what you have.';
+      } else {
+        if(local) usedLocal = true; else usedExternal = true;
+        result = await executeToolCall(call, controller.signal, chat);
+      }
       if(controller.signal.aborted){
         logEntry.status = 'aborted';
         logEntry.result = 'Cancelled.';
@@ -2543,7 +2886,12 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
       return;
     }
 
-    return streamAssistantResponse(chat, index, model, history, controller, toolRound + 1);
+    const nextRounds = {
+      local: rounds.local + (usedLocal ? 1 : 0),
+      external: rounds.external + (usedExternal ? 1 : 0),
+      refused: (usedLocal || usedExternal) ? 0 : rounds.refused + 1
+    };
+    return streamAssistantResponse(chat, index, model, history, controller, nextRounds);
   }
 }
 
@@ -2591,6 +2939,7 @@ renderModelSelect();
 checkConnection();
 setInterval(checkConnection, 15000);
 setInterval(checkProxyStatus, 15000);
+setInterval(checkMcpStatus, 15000);
 
 // Try to silently pick back up a previously connected local save file. If
 // the file has newer/different content than what's cached in localStorage

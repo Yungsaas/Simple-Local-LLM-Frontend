@@ -47,6 +47,7 @@ async function sendMessage(){
     chat = makeNewChat();
     chat.promptPresetId = state.draft.promptPresetId;
     chat.webSearchEnabled = state.draft.webSearchEnabled;
+    chat.mcpEnabled = state.draft.mcpEnabled;
     chat.compare = state.draft.compare;
     chat.compareModel = state.draft.compareModel;
     chat.compareMode = state.draft.compareMode;
@@ -143,13 +144,27 @@ function resolveThinkValue(){
 // lookups and is always offered to the model. web_search/web_fetch use a
 // DuckDuckGo lookup routed through a proxy the user runs locally
 // (local_cors_proxy.py, never a public one), so they're gated behind the
-// per-chat "Web search" toggle. Everything else still only talks to the
-// user's local Ollama server.
+// per-chat "Web search" toggle. MCP tools (see mcp.js) are gated behind the
+// per-chat "MCP tools" toggle. Everything else still
+// only talks to the user's local Ollama server.
 // =====================================================================
 
-const MAX_TOOL_ROUNDS = 5;
-const TOOL_MIN_INTERVAL_MS = 1000; // minimum gap between tool calls, human-paced rather than bot-paced
-let lastToolCallTime = 0;
+// Tools fall into two groups with separate limits and cooldowns:
+//   local    -- MCP tools, which only talk to this machine (bridge + local apps)
+//   external -- wikipedia_lookup, web_search, web_fetch, which hit third-party sites
+// A "round" is one model reply that requested tools, followed by the results
+// being fed back. A round counts against every group it used, per message.
+const MAX_LOCAL_TOOL_ROUNDS = 15;
+const MAX_EXTERNAL_TOOL_ROUNDS = 5;
+// Minimum gap between tool calls in each group. External stays human-paced
+// rather than bot-paced; local is basically instant so it only needs a tiny gap.
+const LOCAL_TOOL_MIN_INTERVAL_MS = 50;
+const EXTERNAL_TOOL_MIN_INTERVAL_MS = 1000;
+const lastToolCallTime = { local: 0, external: 0 };
+
+function isLocalTool(name){
+  return isMcpTool(name);
+}
 
 // Always available, no proxy required.
 const WIKIPEDIA_TOOLS = [
@@ -200,8 +215,9 @@ const WEB_SEARCH_TOOLS = [
 // tool making a handful of on-demand requests at human-typing pace, not a
 // bulk scraper, and this keeps it that way regardless of how eagerly a
 // model chains tool calls.
-async function enforceToolRateLimit(signal){
-  const wait = lastToolCallTime + TOOL_MIN_INTERVAL_MS - Date.now();
+async function enforceToolRateLimit(signal, group){
+  const interval = group === 'local' ? LOCAL_TOOL_MIN_INTERVAL_MS : EXTERNAL_TOOL_MIN_INTERVAL_MS;
+  const wait = lastToolCallTime[group] + interval - Date.now();
   if(wait > 0){
     await new Promise(resolve => {
       const t = setTimeout(resolve, wait);
@@ -210,7 +226,7 @@ async function enforceToolRateLimit(signal){
       }
     });
   }
-  lastToolCallTime = Date.now();
+  lastToolCallTime[group] = Date.now();
 }
 
 // Resolves a natural-language query to the best-matching Wikipedia article
@@ -317,16 +333,22 @@ async function webFetch(url, signal){
 
 // Runs one model-requested tool call and returns its result as plain text
 // (or a descriptive error string, so the model can see what went wrong and
-// react instead of the whole turn silently failing).
-async function executeToolCall(call, signal){
+// react instead of the whole turn silently failing). `chat` is needed so
+// per-chat toggles (like MCP access) are enforced here too, not
+// just by which tools were offered to the model.
+async function executeToolCall(call, signal, chat){
   const name = call.function.name;
   let args = call.function.arguments;
   if(typeof args === 'string'){
     try{ args = JSON.parse(args); }catch(e){ args = {}; }
   }
-  await enforceToolRateLimit(signal);
+  await enforceToolRateLimit(signal, isLocalTool(name) ? 'local' : 'external');
   if(signal && signal.aborted) return 'Cancelled.';
   try{
+    if(isMcpTool(name)){
+      if(!chat || !chat.mcpEnabled) return 'MCP tools are turned off for this chat.';
+      return await runMcpTool(name, args || {}, signal);
+    }
     if(name === 'wikipedia_lookup') return await wikipediaLookup(args.query || '', signal);
     if(name === 'web_search') return await duckduckgoSearch(args.query || '', signal);
     if(name === 'web_fetch') return await webFetch(args.url || '', signal);
@@ -341,11 +363,12 @@ async function executeToolCall(call, signal){
 // incrementally as tokens arrive, and on completion records tokens/sec, time
 // to first token, and total latency from Ollama's final "done" payload for
 // renderAssistantMeta to display. Independent per call, so two can run
-// concurrently for side-by-side comparison. toolRound tracks how many
-// tool-call round-trips this turn has made, so a model that keeps chaining
-// tool calls can't loop forever.
-async function streamAssistantResponse(chat, index, model, history, controller, toolRound){
-  toolRound = toolRound || 0;
+// concurrently for side-by-side comparison. `rounds` tracks how many
+// tool-call round-trips this turn has made per group (local / external), so a
+// model that keeps chaining tool calls can't loop forever. `refused` counts
+// rounds where every requested call was turned down for being over budget.
+async function streamAssistantResponse(chat, index, model, history, controller, rounds){
+  rounds = rounds || { local: 0, external: 0, refused: 0 };
   if(chat.messages[index].queued){
     delete chat.messages[index].queued;
     updateStreamingBubble(index);
@@ -366,9 +389,23 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
     if(state.settings.maxTokens){
       body.options = { num_predict: state.settings.maxTokens };
     }
-    if(toolRound < MAX_TOOL_ROUNDS){
-      body.tools = chat.webSearchEnabled ? WIKIPEDIA_TOOLS.concat(WEB_SEARCH_TOOLS) : WIKIPEDIA_TOOLS;
+    // Each group is only offered while it still has rounds left this turn.
+    let tools = [];
+    if(rounds.external < MAX_EXTERNAL_TOOL_ROUNDS){
+      tools = tools.concat(WIKIPEDIA_TOOLS);
+      if(chat.webSearchEnabled) tools = tools.concat(WEB_SEARCH_TOOLS);
     }
+    if(chat.mcpEnabled && rounds.local < MAX_LOCAL_TOOL_ROUNDS){
+      // If the bridge is down or the token is wrong, the model simply isn't
+      // offered these tools; the toggle button turns red and says why.
+      try{
+        await refreshMcpTools(false);
+        tools = tools.concat(mcpState.tools);
+      }catch(e){
+        if(e.name === 'AbortError') throw e;
+      }
+    }
+    if(tools.length) body.tools = tools;
     const res = await fetch(state.settings.baseUrl + '/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -449,11 +486,13 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
   // If the model asked to use a tool, run it, feed the result back in, and
   // let the model continue, reusing the same message bubble so the tool
   // activity log and eventual answer appear as one continuous turn.
-  if(pendingToolCalls && pendingToolCalls.length && toolRound < MAX_TOOL_ROUNDS){
+  if(pendingToolCalls && pendingToolCalls.length && rounds.refused < 2){
     const msg = chat.messages[index];
     msg.toolLog = msg.toolLog || [];
 
     history.push({ role: 'assistant', content: msg.content || '', tool_calls: pendingToolCalls });
+
+    let usedLocal = false, usedExternal = false;
 
     for(const call of pendingToolCalls){
       if(controller.signal.aborted) break;
@@ -463,7 +502,19 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
       msg.toolLog.push(logEntry);
       updateStreamingBubble(index);
 
-      const result = await executeToolCall(call, controller.signal);
+      // Over-budget calls (a model can ask for a tool it wasn't offered) are
+      // answered with a refusal instead of being run.
+      const local = isLocalTool(call.function.name);
+      const overBudget = local
+        ? rounds.local >= MAX_LOCAL_TOOL_ROUNDS
+        : rounds.external >= MAX_EXTERNAL_TOOL_ROUNDS;
+      let result;
+      if(overBudget){
+        result = 'Tool limit reached for this message. Do not call this kind of tool again; answer with what you have.';
+      } else {
+        if(local) usedLocal = true; else usedExternal = true;
+        result = await executeToolCall(call, controller.signal, chat);
+      }
       if(controller.signal.aborted){
         logEntry.status = 'aborted';
         logEntry.result = 'Cancelled.';
@@ -483,7 +534,12 @@ async function streamAssistantResponse(chat, index, model, history, controller, 
       return;
     }
 
-    return streamAssistantResponse(chat, index, model, history, controller, toolRound + 1);
+    const nextRounds = {
+      local: rounds.local + (usedLocal ? 1 : 0),
+      external: rounds.external + (usedExternal ? 1 : 0),
+      refused: (usedLocal || usedExternal) ? 0 : rounds.refused + 1
+    };
+    return streamAssistantResponse(chat, index, model, history, controller, nextRounds);
   }
 }
 

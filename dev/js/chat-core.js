@@ -25,7 +25,11 @@ function resolveSystemPrompt(chat){
 // requests from cross-contaminating via tool-call round-trips, which append to
 // the array they're handed.
 function buildHistoryForModel(chat, model){
-  const systemPrompt = resolveSystemPrompt(chat);
+  let systemPrompt = resolveSystemPrompt(chat);
+  // When MCP tools are on, add usage guidance for them.
+  if(chat.mcpEnabled){
+    systemPrompt = (systemPrompt ? systemPrompt + '\n\n' : '') + MCP_SYSTEM_NOTE;
+  }
   const history = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
   chat.messages.forEach(m => {
     if(m.role === 'assistant' && m.groupId && m.model !== model) return;

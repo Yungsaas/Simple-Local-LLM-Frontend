@@ -108,6 +108,7 @@ function renderToolLog(toolLog){
     if(t.type === 'wikipedia_lookup') return `Wikipedia: "${escapeHtml(t.args.query || '')}"`;
     if(t.type === 'web_search') return `Searching: "${escapeHtml(t.args.query || '')}"`;
     if(t.type === 'web_fetch') return `Fetching: ${escapeHtml(t.args.url || '')}`;
+    if(t.type.includes('__')) return `MCP: ${escapeHtml(t.type.replace('__', ' → '))}`;
     return escapeHtml(t.type);
   };
   const summary = stillRunning
@@ -261,4 +262,3 @@ function updateScrollBottomBtn(){
   if(!btn) return;
   btn.style.display = state.autoScroll ? 'none' : 'flex';
 }
-

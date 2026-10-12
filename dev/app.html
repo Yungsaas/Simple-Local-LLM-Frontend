@@ -28,6 +28,7 @@
       <div class="topbar-right">
         <select class="model-select" id="promptSelect" onchange="onPromptSelectChange(this.value)" title="Instructions for this chat"></select>
         <button class="compare-toggle-btn" id="webSearchToggleBtn" onclick="toggleWebSearch()" title="Let the model search the live web and fetch pages (Wikipedia lookup is always available and needs no toggle)">Web search</button>
+        <button class="compare-toggle-btn" id="mcpToggleBtn" onclick="toggleMcp()" title="Let the model use tools from the MCP servers in mcp_servers.json, e.g. Roblox Studio (needs mcp_bridge.py running)">MCP tools</button>
         <button class="compare-toggle-btn" id="compareToggleBtn" onclick="toggleCompareMode()" title="Send each message to two models side-by-side">⇄ Compare</button>
         <select class="model-select" id="compareModeSelect" style="display:none;" onchange="onCompareModeChange(this.value)" title="Run both models at once, or one after the other">
           <option value="simultaneous">Together</option>
@@ -105,6 +106,14 @@
       <input type="text" id="corsProxyInput" placeholder="http://127.0.0.1:8765/?url=">
     </div>
     <div class="field">
+      <label>MCP bridge <span class="field-hint">(mcp_bridge.py, the local script that runs your MCP servers, e.g. Roblox Studio; servers are listed in mcp_servers.json)</span></label>
+      <input type="text" id="mcpBridgeInput" placeholder="http://127.0.0.1:8766">
+      <input type="password" id="mcpTokenInput" placeholder="Bridge token (printed when mcp_bridge.py starts)" autocomplete="off" style="margin-top:8px;">
+      <label style="display:flex; align-items:center; gap:8px; margin:8px 0 0 0;">
+        <input type="checkbox" id="mcpConfirmInput" style="width:auto;"> Ask me before tools that may change things
+      </label>
+    </div>
+    <div class="field">
       <label>Chat storage</label>
       <div id="storageSettings"></div>
       <input type="file" id="importFileInput" accept="application/json" style="display:none;" onchange="handleImportFile(event)">
@@ -127,6 +136,7 @@
 <script src="js/toast.js"></script>
 <script src="js/controls.js"></script>
 <script src="js/settings.js"></script>
+<script src="js/mcp.js"></script>
 <script src="js/chat-send.js"></script>
 <script src="js/init.js"></script>
 </body>

@@ -19,6 +19,9 @@ function openSettings(){
   document.getElementById('thinkLevelInput').value = state.settings.thinkLevel || 'default';
   document.getElementById('maxTokensInput').value = state.settings.maxTokens || '';
   document.getElementById('corsProxyInput').value = state.settings.corsProxyUrl || '';
+  document.getElementById('mcpBridgeInput').value = state.settings.mcpBridgeUrl || DEFAULT_MCP_BRIDGE;
+  document.getElementById('mcpTokenInput').value = state.settings.mcpBridgeToken || '';
+  document.getElementById('mcpConfirmInput').checked = state.settings.mcpConfirmCalls !== false;
   showSettingsMessage('');
   state.addingModel = false;
   state.addingPreset = false;
@@ -113,6 +116,9 @@ function saveSettings(){
   state.settings.thinkLevel = document.getElementById('thinkLevelInput').value;
   state.settings.maxTokens = maxTokens;
   state.settings.corsProxyUrl = document.getElementById('corsProxyInput').value.trim() || DEFAULT_CORS_PROXY;
+  state.settings.mcpBridgeUrl = document.getElementById('mcpBridgeInput').value.trim().replace(/\/$/,'') || DEFAULT_MCP_BRIDGE;
+  state.settings.mcpBridgeToken = document.getElementById('mcpTokenInput').value.trim();
+  state.settings.mcpConfirmCalls = document.getElementById('mcpConfirmInput').checked;
   persistSettings();
   settingsSnapshotOnOpen = null;
   closeSettings();
@@ -330,4 +336,3 @@ function deletePreset(id, ev){
   renderPresetListSettings();
   renderPromptSelect();
 }
-

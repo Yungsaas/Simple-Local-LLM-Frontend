@@ -9,6 +9,7 @@ renderModelSelect();
 checkConnection();
 setInterval(checkConnection, 15000);
 setInterval(checkProxyStatus, 15000);
+setInterval(checkMcpStatus, 15000);
 
 // Try to silently pick back up a previously connected local save file. If
 // the file has newer/different content than what's cached in localStorage

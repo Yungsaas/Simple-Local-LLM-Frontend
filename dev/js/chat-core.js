@@ -1,10 +1,10 @@
-function getCurrentChat(){
+function getCurrentChat() {
   return state.chats.find(c => c.id === state.currentId) || null;
 }
 
 // Returns the model that should be used for a given chat: the chat's own
 // remembered model if it has one, otherwise the global last-used model.
-function resolveActiveModel(chat){
+function resolveActiveModel(chat) {
   return (chat && chat.model) || state.settings.activeModel || null;
 }
 
@@ -12,8 +12,8 @@ function resolveActiveModel(chat){
 // null if the chat has none (or the preset it referenced was since deleted).
 // Resolved fresh each time rather than snapshotted, so editing a preset's
 // wording takes effect for future messages in any chat using it.
-function resolveSystemPrompt(chat){
-  if(!chat || !chat.promptPresetId) return null;
+function resolveSystemPrompt(chat) {
+  if (!chat || !chat.promptPresetId) return null;
   const preset = (state.settings.promptPresets || []).find(p => p.id === chat.promptPresetId);
   return preset ? preset.content : null;
 }
@@ -24,11 +24,14 @@ function resolveSystemPrompt(chat){
 // parallel answer. A new array per call also stops the two concurrent compare
 // requests from cross-contaminating via tool-call round-trips, which append to
 // the array they're handed.
-function buildHistoryForModel(chat, model){
-  const systemPrompt = resolveSystemPrompt(chat);
+function buildHistoryForModel(chat, model) {
+  let systemPrompt = resolveSystemPrompt(chat);
+  if (chat.robloxEnabled) {
+    systemPrompt = (systemPrompt ? systemPrompt + '\n\n' : '') + ROBLOX_SYSTEM_NOTE;
+  }
   const history = systemPrompt ? [{ role: 'system', content: systemPrompt }] : [];
   chat.messages.forEach(m => {
-    if(m.role === 'assistant' && m.groupId && m.model !== model) return;
+    if (m.role === 'assistant' && m.groupId && m.model !== model) return;
     history.push({ role: m.role, content: m.content });
   });
   return history;
@@ -41,8 +44,8 @@ function buildHistoryForModel(chat, model){
 // sidebar entry) once the first message is actually sent, see
 // sendMessage() in chat-send.js. This is also what "+ New chat" does: a
 // chat is only worth a sidebar slot once it has something in it.
-function goHome(){
-  if(state.streaming) return;
+function goHome() {
+  if (state.streaming) return;
   state.currentId = null;
   resetDraft();
   renderChatList();
@@ -50,12 +53,12 @@ function goHome(){
   renderModelSelect();
 }
 
-function newChat(){
+function newChat() {
   goHome();
 }
 
-function selectChat(id){
-  if(state.streaming) return;
+function selectChat(id) {
+  if (state.streaming) return;
   state.currentId = id;
   renderChatList();
   renderMessages();
@@ -63,15 +66,15 @@ function selectChat(id){
   checkConnection();
 }
 
-function deleteChat(id, ev){
+function deleteChat(id, ev) {
   ev.stopPropagation();
   // The chat actively streaming a response is always state.currentId (newChat
   // and selectChat both refuse to change it while streaming), so this is the
   // one case that needs blocking, deleting it would detach the in-flight
   // response from state.chats and silently discard it once it finishes.
-  if(state.streaming && id === state.currentId) return;
+  if (state.streaming && id === state.currentId) return;
   state.chats = state.chats.filter(c => c.id !== id);
-  if(state.currentId === id){
+  if (state.currentId === id) {
     state.currentId = state.chats.length ? state.chats[0].id : null;
   }
   persistChats();
@@ -80,9 +83,9 @@ function deleteChat(id, ev){
   renderModelSelect();
 }
 
-function renderChatList(){
+function renderChatList() {
   const homeBtn = document.getElementById('homeBtn');
-  if(homeBtn) homeBtn.classList.toggle('active', state.currentId === null);
+  if (homeBtn) homeBtn.classList.toggle('active', state.currentId === null);
 
   const el = document.getElementById('chatList');
   el.innerHTML = '';

@@ -5,12 +5,11 @@ const SETTINGS_KEY = 'ollama_chat_settings_v1';
 // so web_search/web_fetch never route through a third party. Defined once here
 // and reused everywhere the default is needed.
 const DEFAULT_CORS_PROXY = 'http://127.0.0.1:8765/?url=';
-// below DEFAULT_CORS_PROXY:
-const DEFAULT_ROBLOX_BRIDGE = 'http://127.0.0.1:8766';
+
 let state = {
   chats: [],        // {id, title, model, messages:[{role,content}], createdAt, compare, compareModel}
   currentId: null,
-  settings: { baseUrl: 'http://localhost:11434', models: ['gemma4:e4b'], activeModel: 'gemma4:e4b', theme: 'light', thinkLevel: 'default', maxTokens: null, useLocalFile: false, promptPresets: [], corsProxyUrl: DEFAULT_CORS_PROXY, robloxBridgeUrl: DEFAULT_ROBLOX_BRIDGE, robloxConfirmWrites: true },
+  settings: { baseUrl: 'http://localhost:11434', models: ['gemma4:e4b'], activeModel: 'gemma4:e4b', theme: 'light', thinkLevel: 'default', maxTokens: null, useLocalFile: false, promptPresets: [], corsProxyUrl: DEFAULT_CORS_PROXY },
   streaming: false,
   abortControllers: [],
   addingModel: false,
@@ -21,7 +20,7 @@ let state = {
   // i.e. before any chat exists yet. Applied to the chat the moment it's
   // actually created (see sendMessage), then reset by resetDraft() the
   // next time the user lands back on Home. See resetDraft() below.
-  draft: { promptPresetId: null, webSearchEnabled: false, compare: false, compareModel: null, compareMode: 'simultaneous', robloxEnabled: false },
+  draft: { promptPresetId: null, webSearchEnabled: false, compare: false, compareModel: null, compareMode: 'simultaneous' },
 };
 
 function load(){
@@ -86,8 +85,6 @@ function load(){
   if(!state.settings.corsProxyUrl || RETIRED_PUBLIC_PROXY_DEFAULTS.includes(state.settings.corsProxyUrl)){
     state.settings.corsProxyUrl = DEFAULT_CORS_PROXY;
   }
-  if(!state.settings.robloxBridgeUrl) state.settings.robloxBridgeUrl = DEFAULT_ROBLOX_BRIDGE;
-  if(state.settings.robloxConfirmWrites === undefined) state.settings.robloxConfirmWrites = true;
   applyTheme();
 }
 
@@ -134,8 +131,7 @@ function makeNewChat(){
     compareModel: null,
     compareMode: 'simultaneous',
     promptPresetId: null,
-    webSearchEnabled: false,
-    robloxEnabled: false
+    webSearchEnabled: false
   };
 }
 
@@ -149,7 +145,6 @@ function resetDraft(){
     webSearchEnabled: false,
     compare: false,
     compareModel: null,
-    compareMode: 'simultaneous',
-    robloxEnabled: false
+    compareMode: 'simultaneous'
   };
 }
